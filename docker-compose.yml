@@ -7,15 +7,9 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
-      - WAHA_URL=${WAHA_URL}
-      - WAHA_TOKEN=${WAHA_TOKEN}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID}
-      - HUMAN_PAUSE_HOURS=${HUMAN_PAUSE_HOURS}
+      - ADMIN_PASSWORD=admin
       - USE_RESPONSES_API=false
     restart: unless-stopped
     volumes:
-      - waha_threads:/app/threads
-
-volumes:
-  waha_threads:
+      - ./threads:/app/threads
+      - ./data:/app/data

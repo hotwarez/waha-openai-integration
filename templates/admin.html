@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS Control Panel - WAHA Bridge</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --border-color: #334155;
+            --input-bg: #0f172a;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: -webkit-linear-gradient(#60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            flex: 1;
+            width: 100%;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-danger {
+            background-color: transparent;
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+        .btn-danger:hover {
+            background-color: var(--danger);
+            color: white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .clients-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .client-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .client-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .client-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .client-card:hover::before {
+            opacity: 1;
+        }
+
+        .client-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .client-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .client-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .info-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .info-value {
+            font-size: 0.9rem;
+            background-color: var(--bg-color);
+            padding: 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            word-break: break-all;
+            font-family: monospace;
+        }
+
+        .webhook-box {
+            margin-top: 1rem;
+            background-color: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .webhook-box .info-label {
+            color: var(--primary);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 500px;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            transform: scale(0.95) translateY(20px);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .close-btn:hover {
+            color: var(--text-main);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn-cancel {
+            background-color: transparent;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-cancel:hover {
+            background-color: var(--border-color);
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 4rem 2rem;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            border: 1px dashed var(--border-color);
+            color: var(--text-muted);
+        }
+
+        .empty-state h3 {
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>WAHA Bridge - Control Panel</h1>
+        <p style="color: var(--text-muted); margin-top: 0.5rem;">SaaS Multi-Tenant Management</p>
+    </div>
+
+    <div class="container">
+        <div class="top-bar">
+            <h2>Clients (<span id="client-count">0</span>)</h2>
+            <button class="btn" onclick="openModal()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Novo Cliente
+            </button>
+        </div>
+
+        <div class="clients-grid" id="clients-grid">
+            <!-- Loading state -->
+            <div class="empty-state">
+                <h3>Carregando clientes...</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Client Modal -->
+    <div class="modal-overlay" id="clientModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Novo Cliente</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            
+            <form id="clientForm" onsubmit="saveClient(event)">
+                <input type="hidden" id="clientId">
+                
+                <div class="form-group">
+                    <label for="name">Nome da Empresa / Cliente *</label>
+                    <input type="text" id="name" class="form-control" required placeholder="Ex: Clínica Enlace">
+                </div>
+                
+                <div class="form-group">
+                    <label for="webhookSlug">Webhook Slug (URL única) *</label>
+                    <input type="text" id="webhookSlug" class="form-control" required placeholder="Ex: clinica-enlace">
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block;">Apenas letras minúsculas e hífens. Ex: meu-cliente</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="openaiKey">OpenAI API Key *</label>
+                    <input type="password" id="openaiKey" class="form-control" required placeholder="sk-proj-...">
+                </div>
+                
+                <div class="form-group">
+                    <label for="openaiAssistantId">OpenAI Assistant ID *</label>
+                    <input type="text" id="openaiAssistantId" class="form-control" required placeholder="asst_...">
+                </div>
+                
+                <div class="form-group">
+                    <label for="wahaUrl">WAHA URL *</label>
+                    <input type="url" id="wahaUrl" class="form-control" required placeholder="https://waha3.whatscorporativo.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="wahaToken">WAHA Token</label>
+                    <input type="text" id="wahaToken" class="form-control" placeholder="Token de autenticação (opcional)">
+                </div>
+
+                <div class="form-group">
+                    <label for="humanPauseHours">Horas de Pausa p/ Atendimento Humano *</label>
+                    <input type="number" id="humanPauseHours" class="form-control" required value="24" min="1">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn">Salvar Cliente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let clientsData = [];
+
+        // Fetch clients on load
+        document.addEventListener('DOMContentLoaded', fetchClients);
+
+        async function fetchClients() {
+            try {
+                const response = await fetch(`${API_BASE}/api/clients`);
+                if (!response.ok) throw new Error('Failed to fetch clients');
+                clientsData = await response.json();
+                renderClients();
+            } catch (error) {
+                console.error('Error fetching clients:', error);
+                document.getElementById('clients-grid').innerHTML = `
+                    <div class="empty-state">
+                        <h3 style="color: var(--danger)">Erro ao carregar clientes</h3>
+                        <p>Verifique o console para mais detalhes.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderClients() {
+            const grid = document.getElementById('clients-grid');
+            document.getElementById('client-count').innerText = clientsData.length;
+            
+            if (clientsData.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Nenhum cliente cadastrado</h3>
+                        <p>Clique em "Novo Cliente" para começar.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = clientsData.map(client => `
+                <div class="client-card">
+                    <div class="client-header">
+                        <div class="client-name">${escapeHTML(client.Name)}</div>
+                        <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">Excluir</button>
+                    </div>
+                    
+                    <div class="client-info">
+                        <div class="webhook-box">
+                            <div class="info-label">Webhook URL (Colar no WAHA)</div>
+                            <div class="info-value" style="font-weight: 600; color: #fff; background: rgba(0,0,0,0.3); border: none; cursor: pointer;" onclick="copyToClipboard(this, '${API_BASE}/webhook/${escapeHTML(client.WebhookSlug)}')">
+                                ${API_BASE}/webhook/${escapeHTML(client.WebhookSlug)}
+                            </div>
+                        </div>
+                        
+                        <div class="info-row">
+                            <div class="info-label">Assistant ID</div>
+                            <div class="info-value">${escapeHTML(client.OpenAIAssistant)}</div>
+                        </div>
+                        
+                        <div class="info-row">
+                            <div class="info-label">WAHA URL</div>
+                            <div class="info-value">${escapeHTML(client.WahaURL)}</div>
+                        </div>
+                        
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                            <div class="info-row" style="flex: 1;">
+                                <div class="info-label">Pausa Humano</div>
+                                <div class="info-value">${client.HumanPauseHours} horas</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            grid.innerHTML = html;
+        }
+
+        function copyToClipboard(el, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = el.innerText;
+                el.innerText = 'Copiado!';
+                el.style.color = '#10b981';
+                setTimeout(() => {
+                    el.innerText = originalText;
+                    el.style.color = '#fff';
+                }, 2000);
+            });
+        }
+
+        async function saveClient(e) {
+            e.preventDefault();
+            
+            const payload = {
+                Name: document.getElementById('name').value,
+                WebhookSlug: document.getElementById('webhookSlug').value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                OpenAIKey: document.getElementById('openaiKey').value,
+                OpenAIAssistant: document.getElementById('openaiAssistantId').value,
+                WahaURL: document.getElementById('wahaUrl').value,
+                WahaToken: document.getElementById('wahaToken').value,
+                HumanPauseHours: parseInt(document.getElementById('humanPauseHours').value)
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/clients`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Failed to save client');
+                }
+                
+                closeModal();
+                fetchClients(); // Reload grid
+                
+            } catch (error) {
+                alert('Erro: ' + error.message);
+            }
+        }
+
+        async function deleteClient(id) {
+            if (!confirm('Tem certeza que deseja excluir este cliente? O robô vai parar de responder para ele.')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/clients/${id}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error('Failed to delete');
+                fetchClients();
+            } catch (error) {
+                alert('Erro ao excluir: ' + error.message);
+            }
+        }
+
+        // Modal Functions
+        const modal = document.getElementById('clientModal');
+        const form = document.getElementById('clientForm');
+
+        function openModal() {
+            form.reset();
+            document.getElementById('clientId').value = '';
+            document.getElementById('modalTitle').innerText = 'Novo Cliente';
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+        }
+
+        // Close modal on click outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        // Basic HTML escaping
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag])
+            );
+        }
+    </script>
+</body>
+</html>

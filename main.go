@@ -2,7 +2,9 @@ package main
 
 import (
     "bytes"
+    "embed"
     "fmt"
+    "html/template"
     "io"
     "log"
     "net/http"
@@ -18,13 +20,12 @@ import (
 )
 
 type Config struct {
-    WahaURL         string
-    WahaToken       string
-    OpenAIKey       string
-    OpenAIAssistant string
-    HumanPauseHours int
     UseResponsesAPI bool
+    AdminPassword   string
 }
+
+//go:embed templates/*
+var templatesFS embed.FS
 
 var (
     client        = resty.New()
@@ -35,30 +36,73 @@ var (
 func loadConfig() Config {
     _ = godotenv.Load()
     useResp, _ := strconv.ParseBool(os.Getenv("USE_RESPONSES_API"))
-    pauseHours, err := strconv.Atoi(os.Getenv("HUMAN_PAUSE_HOURS"))
-    if err != nil || pauseHours <= 0 {
-        pauseHours = 24 // default 24h
+    pwd := os.Getenv("ADMIN_PASSWORD")
+    if pwd == "" {
+        pwd = "admin" // default fallback
     }
     return Config{
-        WahaURL:         strings.TrimSpace(os.Getenv("WAHA_URL")),
-        WahaToken:       strings.TrimSpace(os.Getenv("WAHA_TOKEN")),
-        OpenAIKey:       strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-        OpenAIAssistant: strings.TrimSpace(os.Getenv("OPENAI_ASSISTANT_ID")),
-        HumanPauseHours: pauseHours,
         UseResponsesAPI: useResp,
+        AdminPassword:   pwd,
     }
 }
 
 
 func main() {
+    initDB()
     cfg := loadConfig()
-    if cfg.WahaURL == "" || cfg.OpenAIKey == "" {
-        log.Printf("WARNING: WAHA_URL or OPENAI_API_KEY is empty! Environment variables were not passed correctly by Portainer.")
-    }
+
     r := gin.Default()
-    r.POST("/webhook", func(c *gin.Context) {
+    templ := template.Must(template.New("").ParseFS(templatesFS, "templates/*"))
+    r.SetHTMLTemplate(templ)
+
+    // Admin Panel Routes (Protected)
+    adminGroup := r.Group("/admin", gin.BasicAuth(gin.Accounts{
+        "admin": cfg.AdminPassword,
+    }))
+    adminGroup.GET("", func(c *gin.Context) {
+        c.HTML(http.StatusOK, "admin.html", nil)
+    })
+
+    // API Routes (Protected)
+    api := r.Group("/api", gin.BasicAuth(gin.Accounts{
+        "admin": cfg.AdminPassword,
+    }))
+    api.GET("/clients", func(c *gin.Context) {
+        var clients []Client
+        DB.Find(&clients)
+        c.JSON(http.StatusOK, clients)
+    })
+    api.POST("/clients", func(c *gin.Context) {
+        var client Client
+        if err := c.BindJSON(&client); err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+            return
+        }
+        client.WebhookSlug = strings.ToLower(strings.ReplaceAll(client.WebhookSlug, " ", "-"))
+        if err := DB.Save(&client).Error; err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save: " + err.Error()})
+            return
+        }
+        c.JSON(http.StatusOK, client)
+    })
+    api.DELETE("/clients/:id", func(c *gin.Context) {
+        id := c.Param("id")
+        DB.Delete(&Client{}, id)
+        c.Status(http.StatusOK)
+    })
+
+    // Dynamic Webhook
+    r.POST("/webhook/:slug", func(c *gin.Context) {
+        slug := c.Param("slug")
+        var client Client
+        if err := DB.Where("webhook_slug = ?", slug).First(&client).Error; err != nil {
+            log.Printf("Webhook error: Client not found for slug %s", slug)
+            c.Status(http.StatusNotFound)
+            return
+        }
+
         bodyBytes, _ := io.ReadAll(c.Request.Body)
-        log.Printf("Raw webhook: %s", string(bodyBytes))
+        log.Printf("[%s] Raw webhook: %s", slug, string(bodyBytes))
         c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
         var payload map[string]interface{}
@@ -87,17 +131,17 @@ func main() {
         if session == "" {
             session = "default"
         }
-        log.Printf("Parsed session: '%s', chatID: '%s', text: '%s', fromMe: %v", session, chatID, text, fromMe)
+        log.Printf("[%s] Parsed session: '%s', chatID: '%s', text: '%s', fromMe: %v", slug, session, chatID, text, fromMe)
         
+        pauseKey := slug + ":" + chatID
+
         // Handle fromMe (Human Handoff detection)
         if fromMe {
             if _, isBot := sentBotMsgs.Load(msgID); !isBot {
                 // Sent by a human agent!
-                log.Printf("Human intervention detected for chatID: %s", chatID)
-                humanPauses.Store(chatID, time.Now())
+                log.Printf("[%s] Human intervention detected for chatID: %s", slug, chatID)
+                humanPauses.Store(pauseKey, time.Now())
             } else {
-                // It's just the bot's own message echoing back
-                // We can delete it from the map to free memory
                 sentBotMsgs.Delete(msgID)
             }
             c.Status(http.StatusOK)
@@ -105,37 +149,36 @@ func main() {
         }
 
         // Check if user is currently paused
-        if pauseTimeIf, ok := humanPauses.Load(chatID); ok {
+        if pauseTimeIf, ok := humanPauses.Load(pauseKey); ok {
             pauseTime := pauseTimeIf.(time.Time)
-            if time.Since(pauseTime) < time.Duration(cfg.HumanPauseHours)*time.Hour {
-                log.Printf("Ignoring message from %s (human pause active)", chatID)
+            if time.Since(pauseTime) < time.Duration(client.HumanPauseHours)*time.Hour {
+                log.Printf("[%s] Ignoring message from %s (human pause active)", slug, chatID)
                 c.Status(http.StatusOK)
                 return
             } else {
-                // Pause expired
-                humanPauses.Delete(chatID)
+                humanPauses.Delete(pauseKey)
             }
         }
 
         if chatID == "" || text == "" {
-            log.Printf("Error: missing chatID or text")
+            log.Printf("[%s] Error: missing chatID or text", slug)
             c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
             return
         }
         // Process with OpenAI
-        log.Printf("Calling OpenAI for chatID: %s", chatID)
-        reply, err := handleMessage(cfg, chatID, text)
+        log.Printf("[%s] Calling OpenAI for chatID: %s", slug, chatID)
+        reply, err := handleMessage(client, chatID, text)
         if err != nil {
-            log.Printf("OpenAI error: %v", err)
+            log.Printf("[%s] OpenAI error: %v", slug, err)
             // Send generic error back to user
-            sendMessage(cfg, session, chatID, "Desculpe, ocorreu um erro ao processar sua mensagem.")
+            sendMessage(client, session, chatID, "Desculpe, ocorreu um erro ao processar sua mensagem.")
             c.Status(http.StatusOK)
             return
         }
-        log.Printf("OpenAI reply generated: %s", reply)
+        log.Printf("[%s] OpenAI reply generated: %s", slug, reply)
         // Send reply via WAHA
-        sendMessage(cfg, session, chatID, reply)
-        log.Printf("Reply sent to WAHA.")
+        sendMessage(client, session, chatID, reply)
+        log.Printf("[%s] Reply sent to WAHA.", slug)
         c.Status(http.StatusOK)
     })
     // Health endpoint
@@ -146,14 +189,14 @@ func main() {
     r.Run(":" + port)
 }
 
-func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
+func handleMessage(client Client, chatID, userMsg string) (string, error) {
     // Simplified: using OpenAI Assistants API (run creation + polling)
     // 1. Ensure thread exists for this chatID
-    threadID, err := getOrCreateThread(cfg, chatID)
+    threadID, err := getOrCreateThread(client, chatID)
     if err != nil { return "", err }
     // 2. Add user message to thread
-    resp, err := client.R().
-        SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+    resp, err := resty.New().R().
+        SetHeader("Authorization", "Bearer "+client.OpenAIKey).
         SetHeader("OpenAI-Beta", "assistants=v2").
         SetHeader("Content-Type", "application/json").
         SetBody(map[string]interface{}{"role": "user", "content": userMsg}).
@@ -162,11 +205,11 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     if resp.IsError() { return "", fmt.Errorf("OpenAI message error: %s", resp.String()) }
     
     // 3. Create a run
-    runResp, err := client.R().
-        SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+    runResp, err := resty.New().R().
+        SetHeader("Authorization", "Bearer "+client.OpenAIKey).
         SetHeader("OpenAI-Beta", "assistants=v2").
         SetHeader("Content-Type", "application/json").
-        SetBody(map[string]interface{}{"assistant_id": os.Getenv("OPENAI_ASSISTANT_ID")}).
+        SetBody(map[string]interface{}{"assistant_id": client.OpenAIAssistant}).
         Post("https://api.openai.com/v1/threads/" + threadID + "/runs")
     if err != nil { return "", err }
     if runResp.IsError() { return "", fmt.Errorf("OpenAI run error: %s", runResp.String()) }
@@ -174,8 +217,8 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     
     // 4. Poll for completion
     for {
-        statusResp, err := client.R().
-            SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+        statusResp, err := resty.New().R().
+            SetHeader("Authorization", "Bearer "+client.OpenAIKey).
             SetHeader("OpenAI-Beta", "assistants=v2").
             Get("https://api.openai.com/v1/threads/" + threadID + "/runs/" + runID)
         if err != nil { return "", err }
@@ -188,8 +231,8 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     }
     
     // 5. Retrieve assistant messages
-    msgsResp, err := client.R().
-        SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+    msgsResp, err := resty.New().R().
+        SetHeader("Authorization", "Bearer "+client.OpenAIKey).
         SetHeader("OpenAI-Beta", "assistants=v2").
         Get("https://api.openai.com/v1/threads/" + threadID + "/messages")
     if err != nil { return "", err }
@@ -205,16 +248,16 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     return "", fmt.Errorf("no assistant reply found")
 }
 
-func getOrCreateThread(cfg Config, chatID string) (string, error) {
-    // Simple file‑based mapping (could be replaced by DB)
-    // Here we store mapping in ./threads/<chatID>.txt containing threadID
-    path := "threads/" + chatID + ".txt"
+func getOrCreateThread(client Client, chatID string) (string, error) {
+    // Simple file‑based mapping
+    // We isolate thread IDs per client
+    path := "threads/" + client.WebhookSlug + "_" + chatID + ".txt"
     if data, err := os.ReadFile(path); err == nil {
         return string(data), nil
     }
     // Create new thread via OpenAI
-    resp, err := client.R().
-        SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+    resp, err := resty.New().R().
+        SetHeader("Authorization", "Bearer "+client.OpenAIKey).
         SetHeader("OpenAI-Beta", "assistants=v2").
         SetHeader("Content-Type", "application/json").
         SetBody(map[string]interface{}{}).
@@ -226,20 +269,20 @@ func getOrCreateThread(cfg Config, chatID string) (string, error) {
     return threadID, nil
 }
 
-func sendMessage(cfg Config, session, chatID, text string) {
+func sendMessage(client Client, session, chatID, text string) {
     payload := map[string]string{
         "chatId":  chatID,
         "text":    text,
         "session": session,
     }
-    r := client.R().
+    r := resty.New().R().
         SetHeader("Content-Type", "application/json")
-    if cfg.WahaToken != "" {
-        r.SetHeader("Authorization", "Bearer "+cfg.WahaToken)
-        r.SetHeader("X-Api-Key", cfg.WahaToken)
+    if client.WahaToken != "" {
+        r.SetHeader("Authorization", "Bearer "+client.WahaToken)
+        r.SetHeader("X-Api-Key", client.WahaToken)
     }
     resp, err := r.SetBody(payload).
-        Post(cfg.WahaURL + "/api/sendText")
+        Post(client.WahaURL + "/api/sendText")
     if err != nil {
         log.Printf("WAHA Send Error: %v", err)
     } else {
