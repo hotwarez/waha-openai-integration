@@ -144,12 +144,12 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
         Get("https://api.openai.com/v1/threads/" + threadID + "/messages")
     if err != nil { return "", err }
     if msgsResp.IsError() { return "", fmt.Errorf("OpenAI messages error: %s", msgsResp.String()) }
-    // Find the latest assistant message
+    // Find the latest assistant message (index 0 is the newest in OpenAI API)
     msgs := gjson.GetBytes(msgsResp.Body(), "data").Array()
-    for i := len(msgs) - 1; i >= 0; i-- {
-        role := msgs[i].Get("role").String()
-        if role == "assistant" {
-            return msgs[i].Get("content.0.text.value").String(), nil
+    for i := 0; i < len(msgs); i++ {
+        msg := msgs[i]
+        if msg.Get("role").String() == "assistant" {
+            return msg.Get("content.0.text.value").String(), nil
         }
     }
     return "", fmt.Errorf("no assistant reply found")
