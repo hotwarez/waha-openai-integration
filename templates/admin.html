@@ -787,14 +787,20 @@
 
             const html = clientsData.map(client => `
                 <div class="client-card" style="${client.Paused ? 'border: 1px solid var(--danger); opacity: 0.85;' : ''}">
-                    <div class="client-header">
-                        <div class="client-name">
-                            ${escapeHTML(client.Name)}
-                            ${client.Paused ? '<span style="background: var(--danger); color: white; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem; margin-left: 0.5rem; vertical-align: middle;">PAUSADO</span>' : ''}
+                    <div class="client-header" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                            <div class="client-name">
+                                ${escapeHTML(client.Name)}
+                                ${client.Paused ? '<span style="background: var(--danger); color: white; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem; margin-left: 0.5rem; vertical-align: middle;">PAUSADO</span>' : ''}
+                            </div>
+                            
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanEdit)) ? `
+                                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: var(--primary);" onclick='editClient(${JSON.stringify(client)})'>✏️ Editar</button>
+                                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: #8b5cf6;" onclick='openImportModal(${client.ID}, "${escapeHTML(client.Name)}")'>📥 Importar</button>
+                                <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">🗑️</button>` : ''}
+                            </div>
                         </div>
-                        
-                        ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanEdit)) ? 
-                        `<button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">Excluir</button>` : ''}
                     </div>
 
                     
@@ -806,32 +812,30 @@
                             </div>
                         </div>
                         
-                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem; align-items: center;">
-                            <div class="info-row" style="flex: 1;">
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap;">
+                            <div class="info-row" style="flex: 1; min-width: 150px;">
                                 <div class="info-label">Sessão WAHA</div>
                                 <div class="info-value" style="font-family: monospace;">${escapeHTML(client.WahaSession)}</div>
                             </div>
-
-                            ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanViewQR)) ? `
-                            <button
-                                onclick="restartWaha(${client.ID})"
-                                style="background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
-                                onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                🔄 Reiniciar Sessão WAHA
-                            </button>` : ''}
-
                             
-                            ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanViewQR)) ? `
-                            <button
-                                onclick="showQR(${client.ID})"
-                                style="background: linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
-                                onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                📱 Conectar / QR Code
-                            </button>` : ''}
-
+                            <div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">
+                                ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanViewQR)) ? `
+                                <button
+                                    onclick="restartWaha(${client.ID})"
+                                    style="background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition: opacity 0.2s;"
+                                    onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    🔄 Reiniciar
+                                </button>
+                                <button
+                                    onclick="showQR(${client.ID})"
+                                    style="background: linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition: opacity 0.2s;"
+                                    onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    📱 QR Code
+                                </button>` : ''}
+                            </div>
                         </div>
                         
-                        <div class="info-row" style="margin-top: 0.5rem;">
+                        <div class="info-row" style="margin-top: 1rem;">
                             <div class="info-label">Assistant ID</div>
                             <div class="info-value">${escapeHTML(client.OpenAIAssistant)}</div>
                         </div>
@@ -842,8 +846,8 @@
                             <div class="info-value" style="font-style: italic; font-size: 0.85rem;">"${escapeHTML(client.AudioReplyMessage)}"</div>
                         </div>` : ''}
                         
-                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem; align-items: center;">
-                            <div class="info-row" style="flex: 1;">
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                            <div class="info-row">
                                 <div class="info-label">Pausa Humano</div>
                                 <div class="info-value">${client.HumanPauseHours} horas</div>
                             </div>
@@ -852,26 +856,18 @@
                                 ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanPause)) ? (client.Paused ? `
                                 <button
                                     onclick="unpauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
-                                    style="background: linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                    style="background: linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition: opacity 0.2s;"
                                     onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    ▶ Retomar Bot
+                                    ▶️ Retomar Bot
                                 </button>
                                 ` : `
                                 <button
                                     onclick="pauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
-                                    style="background: linear-gradient(135deg,#f43f5e,#e11d48); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                    style="background: linear-gradient(135deg,#f43f5e,#e11d48); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition: opacity 0.2s;"
                                     onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
                                     ⏸️ Pausar Bot
                                 </button>
                                 `) : ''}
-                                ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanPause)) ? `
-                                <button
-                                    onclick="unpauseHuman(${client.ID}, '${escapeHTML(client.Name)}')"
-                                    style="background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
-                                    title="Limpa as travas de humanos que atenderam chats"
-                                    onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    🔄 Resetar Travas
-                                </button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -1074,6 +1070,7 @@
         }
 
         async function showQR(id) {
+            currentQrClientId = id;
             const qrContainer = document.getElementById('qrCodeContainer');
             qrContainer.innerHTML = '<p style="color: var(--text-muted);">Gerando QR Code... Aguarde.</p>';
             document.getElementById('qrModal').classList.add('active');
