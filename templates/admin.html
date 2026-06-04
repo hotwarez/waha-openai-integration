@@ -485,11 +485,17 @@
                             <div class="info-value">${escapeHTML(client.OpenAIAssistant)}</div>
                         </div>
                         
-                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem; align-items: center;">
                             <div class="info-row" style="flex: 1;">
                                 <div class="info-label">Pausa Humano</div>
                                 <div class="info-value">${client.HumanPauseHours} horas</div>
                             </div>
+                            <button
+                                onclick="unpauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
+                                style="background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                ▶ Despausar Bot
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -554,6 +560,21 @@
                 fetchClients();
             } catch (error) {
                 alert('Erro ao excluir: ' + error.message);
+            }
+        }
+
+        async function unpauseClient(id, name) {
+            try {
+                const response = await fetch(`${API_BASE}/api/clients/${id}/unpause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Erro desconhecido');
+                // Visual feedback
+                alert('✅ ' + data.message);
+            } catch (error) {
+                alert('Erro ao despausar: ' + error.message);
             }
         }
 

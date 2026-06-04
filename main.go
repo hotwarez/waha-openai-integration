@@ -91,6 +91,25 @@ func main() {
         c.Status(http.StatusOK)
     })
 
+    api.POST("/clients/:id/unpause", func(c *gin.Context) {
+        id := c.Param("id")
+        var cl Client
+        if err := DB.First(&cl, id).Error; err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+            return
+        }
+        // Remove all human pauses for this client slug
+        prefix := cl.WebhookSlug + ":"
+        humanPauses.Range(func(key, _ interface{}) bool {
+            if strings.HasPrefix(key.(string), prefix) {
+                humanPauses.Delete(key)
+                log.Printf("[%s] Pause manually cleared for key: %s", cl.WebhookSlug, key)
+            }
+            return true
+        })
+        c.JSON(http.StatusOK, gin.H{"message": "Todas as pausas foram removidas para " + cl.Name})
+    })
+
     api.GET("/settings", func(c *gin.Context) {
         var setting GlobalSetting
         DB.FirstOrCreate(&setting, GlobalSetting{ID: 1})
