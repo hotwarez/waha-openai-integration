@@ -69,6 +69,7 @@ func main() {
             return
         }
         // Process with OpenAI
+        log.Printf("Calling OpenAI for chatID: %s", chatID)
         reply, err := handleMessage(cfg, chatID, text)
         if err != nil {
             log.Printf("OpenAI error: %v", err)
@@ -77,8 +78,10 @@ func main() {
             c.Status(http.StatusOK)
             return
         }
+        log.Printf("OpenAI reply generated: %s", reply)
         // Send reply via WAHA
         sendMessage(cfg, chatID, reply)
+        log.Printf("Reply sent to WAHA.")
         c.Status(http.StatusOK)
     })
     // Health endpoint
@@ -95,12 +98,14 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     threadID, err := getOrCreateThread(cfg, chatID)
     if err != nil { return "", err }
     // 2. Add user message to thread
-    _, err = client.R().
+    resp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
         SetHeader("Content-Type", "application/json").
         SetBody(map[string]interface{}{"role": "user", "content": userMsg}).
         Post("https://api.openai.com/v1/threads/" + threadID + "/messages")
     if err != nil { return "", err }
+    if resp.IsError() { return "", fmt.Errorf("OpenAI message error: %s", resp.String()) }
+    
     // 3. Create a run
     runResp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
@@ -108,24 +113,29 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
         SetBody(map[string]interface{}{"assistant_id": os.Getenv("OPENAI_ASSISTANT_ID")}).
         Post("https://api.openai.com/v1/threads/" + threadID + "/runs")
     if err != nil { return "", err }
+    if runResp.IsError() { return "", fmt.Errorf("OpenAI run error: %s", runResp.String()) }
     runID := gjson.GetBytes(runResp.Body(), "id").String()
+    
     // 4. Poll for completion
     for {
         statusResp, err := client.R().
             SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
             Get("https://api.openai.com/v1/threads/" + threadID + "/runs/" + runID)
         if err != nil { return "", err }
+        if statusResp.IsError() { return "", fmt.Errorf("OpenAI status error: %s", statusResp.String()) }
         status := gjson.GetBytes(statusResp.Body(), "status").String()
         if status == "completed" { break }
-        if status == "failed" { return "", fmt.Errorf("run failed") }
+        if status == "failed" { return "", fmt.Errorf("run failed: %s", statusResp.String()) }
         // simple back‑off
-        time.Sleep(500 * time.Millisecond)
+        time.Sleep(1 * time.Second)
     }
+    
     // 5. Retrieve assistant messages
     msgsResp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
         Get("https://api.openai.com/v1/threads/" + threadID + "/messages")
     if err != nil { return "", err }
+    if msgsResp.IsError() { return "", fmt.Errorf("OpenAI messages error: %s", msgsResp.String()) }
     // Find the latest assistant message
     msgs := gjson.GetBytes(msgsResp.Body(), "data").Array()
     for i := len(msgs) - 1; i >= 0; i-- {
@@ -168,7 +178,11 @@ func sendMessage(cfg Config, chatID, text string) {
     if cfg.WahaToken != "" {
         r.SetHeader("Authorization", "Bearer "+cfg.WahaToken)
     }
-    r.SetBody(payload).
+    resp, err := r.SetBody(payload).
         Post(cfg.WahaURL + "/api/sendText")
-    // ignore response for brevity
+    if err != nil {
+        log.Printf("WAHA Send Error: %v", err)
+    } else {
+        log.Printf("WAHA Send Response: %s", resp.String())
+    }
 }
