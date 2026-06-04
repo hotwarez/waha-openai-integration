@@ -4,12 +4,15 @@ services:
   bridge:
     image: ghcr.io/hotwarez/waha-openai:latest
     ports:
-      - "8080:8080"
+      - "8085:8080"
     environment:
       - PORT=8080
       - ADMIN_PASSWORD=admin
-      - USE_RESPONSES_API=false
     restart: unless-stopped
     volumes:
-      - ./threads:/app/threads
-      - ./data:/app/data
+      - saas_threads:/app/threads
+      - saas_data:/app/data
+
+volumes:
+  saas_threads:
+  saas_data:
