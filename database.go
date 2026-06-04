@@ -30,6 +30,7 @@ type GlobalSetting struct {
     WahaToken      string
     ChatwootURL    string
     ChatwootToken  string
+    BackendURL     string
 }
 
 type User struct {

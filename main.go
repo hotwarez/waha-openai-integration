@@ -391,7 +391,28 @@ func main() {
             startReq.SetHeader("X-Api-Key", wahaToken)
             startReq.SetHeader("Authorization", "Bearer "+wahaToken)
         }
-        startReq.SetBody(map[string]interface{}{"name": sessionName})
+        startBody := map[string]interface{}{"name": sessionName}
+                
+                var g GlobalSetting
+                DB.First(&g, 1)
+                if g.BackendURL != "" {
+                    webhookURL := g.BackendURL
+                    if !strings.HasSuffix(webhookURL, "/") {
+                        webhookURL += "/"
+                    }
+                    webhookURL += "webhook/" + cl.WebhookSlug
+                    
+                    startBody["config"] = map[string]interface{}{
+                        "webhooks": []map[string]interface{}{
+                            {
+                                "url": webhookURL,
+                                "events": []string{"message", "message.any", "session.status"},
+                            },
+                        },
+                    }
+                }
+                
+                startReq.SetBody(startBody)
         startReq.Post(wahaURL + "/api/sessions/start") // Best effort, ignore errors
 
         // 2. Fetch QR Code

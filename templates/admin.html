@@ -438,6 +438,12 @@
                     <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
                     <button type="submit" class="btn">Salvar Cliente</button>
                 </div>
+            
+                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
+                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
+                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
+                </div>
             </form>
         </div>
     </div>
@@ -476,6 +482,12 @@
                     <button type="button" class="btn btn-cancel" onclick="closeSettingsModal()">Cancelar</button>
                     <button type="submit" class="btn" style="background-color: #8b5cf6;">Salvar Configurações</button>
                 </div>
+            
+                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
+                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
+                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
+                </div>
             </form>
         </div>
     </div>
@@ -502,6 +514,12 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeImportModal()">Cancelar</button>
                     <button type="submit" class="btn">🚀 Iniciar Importação</button>
+                </div>
+            
+                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
+                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
+                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
                 </div>
             </form>
         </div>
@@ -546,6 +564,12 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeUserModal()">Cancelar</button>
                     <button type="submit" class="btn">Salvar</button>
+                </div>
+            
+                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
+                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
+                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
                 </div>
             </form>
         </div>
@@ -1048,6 +1072,7 @@
                     document.getElementById('globalWahaToken').value = data.WahaToken || '';
                     document.getElementById('globalChatwootURL').value = data.ChatwootURL || '';
                     document.getElementById('globalChatwootToken').value = data.ChatwootToken || '';
+                    document.getElementById('globalBackendURL').value = data.BackendURL || '';
                 }
             } catch (error) {
                 console.error('Error fetching settings:', error);
@@ -1066,7 +1091,10 @@
             e.preventDefault();
             const payload = {
                 WahaURL: document.getElementById('globalWahaUrl').value,
-                WahaToken: document.getElementById('globalWahaToken').value
+                WahaToken: document.getElementById('globalWahaToken').value,
+                ChatwootURL: document.getElementById('globalChatwootURL').value,
+                ChatwootToken: document.getElementById('globalChatwootToken').value,
+                BackendURL: document.getElementById('globalBackendURL').value
             };
 
             try {
