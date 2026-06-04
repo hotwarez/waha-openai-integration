@@ -458,9 +458,19 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="globalWahaToken">WAHA Token Global</label>
-                    <input type="text" id="globalWahaToken" class="form-control" placeholder="Token de autenticação (opcional)">
-                </div>
+                      <label for="globalWahaToken">WAHA Token Global</label>
+                      <input type="text" id="globalWahaToken" class="form-control" placeholder="Token de autenticação (opcional)">
+                  </div>
+                  
+                  <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                      <h3 style="margin-bottom: 1rem; color: var(--primary);">Integração Chatwoot (Global)</h3>
+                      <label for="globalChatwootURL">Chatwoot URL Base (ex: https://chat.seudominio.com)</label>
+                      <input type="text" id="globalChatwootURL" class="form-control">
+                  </div>
+                  <div class="form-group">
+                      <label for="globalChatwootToken">Chatwoot API Access Token (Super Admin)</label>
+                      <input type="password" id="globalChatwootToken" class="form-control">
+                  </div>
 
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeSettingsModal()">Cancelar</button>
@@ -1030,6 +1040,8 @@
                     const data = await response.json();
                     document.getElementById('globalWahaUrl').value = data.WahaURL || '';
                     document.getElementById('globalWahaToken').value = data.WahaToken || '';
+                    document.getElementById('globalChatwootURL').value = data.ChatwootURL || '';
+                    document.getElementById('globalChatwootToken').value = data.ChatwootToken || '';
                 }
             } catch (error) {
                 console.error('Error fetching settings:', error);
