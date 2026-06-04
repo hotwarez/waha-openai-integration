@@ -1,7 +1,9 @@
 package main
 
 import (
+    "bytes"
     "fmt"
+    "io"
     "log"
     "net/http"
     "os"
@@ -40,8 +42,13 @@ func main() {
     }
     r := gin.Default()
     r.POST("/webhook", func(c *gin.Context) {
+        bodyBytes, _ := io.ReadAll(c.Request.Body)
+        log.Printf("Raw webhook: %s", string(bodyBytes))
+        c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
         var payload map[string]interface{}
         if err := c.BindJSON(&payload); err != nil {
+            log.Printf("BindJSON error: %v", err)
             c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
             return
         }
@@ -55,7 +62,9 @@ func main() {
             chatID, _ = payload["chatId"].(string)
             text, _ = payload["text"].(string)
         }
+        log.Printf("Parsed chatID: '%s', text: '%s'", chatID, text)
         if chatID == "" || text == "" {
+            log.Printf("Error: missing chatID or text")
             c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
             return
         }
