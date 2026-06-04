@@ -7,5 +7,5 @@ require (
 	github.com/go-resty/resty/v2 v2.12.0
 	github.com/joho/godotenv v1.5.1
 	github.com/tidwall/gjson v1.17.1
-	github.com/tidwall/sjson v1.3.5
+	github.com/tidwall/sjson v1.2.5
 )

@@ -2,7 +2,8 @@ version: "3.8"
 
 services:
   bridge:
-    image: ghcr.io/hotwarez/waha-openai:latest
+    build: .
+    image: waha-openai-bridge:local
     ports:
       - "8080:8080"
     environment:
