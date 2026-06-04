@@ -107,7 +107,19 @@ func main() {
             }
             return true
         })
-        c.JSON(http.StatusOK, gin.H{"message": "Todas as pausas foram removidas para " + cl.Name})
+        DB.Model(&cl).Update("paused", false)
+        c.JSON(http.StatusOK, gin.H{"message": "Bot despausado para " + cl.Name})
+    })
+
+    api.POST("/clients/:id/pause", func(c *gin.Context) {
+        id := c.Param("id")
+        var cl Client
+        if err := DB.First(&cl, id).Error; err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+            return
+        }
+        DB.Model(&cl).Update("paused", true)
+        c.JSON(http.StatusOK, gin.H{"message": "Bot pausado globalmente para " + cl.Name})
     })
 
     api.GET("/settings", func(c *gin.Context) {
@@ -158,17 +170,25 @@ func main() {
             c.Status(http.StatusOK)
             return
         }
+
+        // Check global pause (set from admin panel)
+        if client.Paused {
+            log.Printf("[%s] Bot is globally paused. Ignoring message.", slug)
+            c.Status(http.StatusOK)
+            return
+        }
         // Extract relevant fields (adjust according to WAHA schema)
         var chatID, text, session, msgID string
-        var fromMe bool
+        var fromMe, hasMedia bool
         if innerPayload, ok := payload["payload"].(map[string]interface{}); ok {
             chatID, _ = innerPayload["from"].(string)
             if innerPayload["to"] != nil && innerPayload["to"] != "" && innerPayload["fromMe"] == true {
-                chatID, _ = innerPayload["to"].(string) // when fromMe is true, the user is the 'to' field usually, but WAHA often puts chat in 'from' or 'to'. Let's check 'to'.
+                chatID, _ = innerPayload["to"].(string)
             }
             text, _ = innerPayload["body"].(string)
             fromMe, _ = innerPayload["fromMe"].(bool)
             msgID, _ = innerPayload["id"].(string)
+            hasMedia, _ = innerPayload["hasMedia"].(bool)
         } else {
             // Fallback for simple testing
             chatID, _ = payload["chatId"].(string)
@@ -207,9 +227,27 @@ func main() {
             }
         }
 
-        if chatID == "" || text == "" {
-            log.Printf("[%s] Error: missing chatID or text", slug)
-            c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
+        if chatID == "" {
+            log.Printf("[%s] Error: missing chatID", slug)
+            c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId"})
+            return
+        }
+
+        // Handle audio messages — reply with custom message if configured
+        if hasMedia && text == "" {
+            audioMsg := client.AudioReplyMessage
+            if audioMsg == "" {
+                audioMsg = "Olá! Não consigo processar áudios. Por favor, envie sua mensagem em texto. 😊"
+            }
+            log.Printf("[%s] Audio message received from %s — sending audio reply", slug, chatID)
+            sendMessage(client, session, chatID, audioMsg)
+            c.Status(http.StatusOK)
+            return
+        }
+
+        if text == "" {
+            log.Printf("[%s] Empty text (non-audio media?), ignoring.", slug)
+            c.Status(http.StatusOK)
             return
         }
 

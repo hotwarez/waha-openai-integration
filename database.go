@@ -9,14 +9,16 @@ import (
 )
 
 type Client struct {
-    ID                uint   `gorm:"primaryKey"`
-    Name              string `gorm:"not null"`
-    WebhookSlug       string `gorm:"uniqueIndex;not null"`
-    WahaURL           string
-    WahaToken         string
-    OpenAIKey         string
-    OpenAIAssistant   string
-    HumanPauseHours   int    `gorm:"default:24"`
+    ID                 uint   `gorm:"primaryKey"`
+    Name               string `gorm:"not null"`
+    WebhookSlug        string `gorm:"uniqueIndex;not null"`
+    WahaURL            string
+    WahaToken          string
+    OpenAIKey          string
+    OpenAIAssistant    string
+    HumanPauseHours    int    `gorm:"default:24"`
+    Paused             bool   `gorm:"default:false"`
+    AudioReplyMessage  string `gorm:"default:''"`
 }
 
 type GlobalSetting struct {

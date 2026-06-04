@@ -391,6 +391,11 @@
                     <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Coloque 0 para desativar a trava (o robô sempre responderá).</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="audioReplyMessage">Mensagem Automática para Áudios (Opcional)</label>
+                    <input type="text" id="audioReplyMessage" class="form-control" placeholder="Olá! Não consigo processar áudios. Por favor, envie texto.">
+                </div>
+
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
                     <button type="submit" class="btn">Salvar Cliente</button>
@@ -466,9 +471,12 @@
             }
 
             const html = clientsData.map(client => `
-                <div class="client-card">
+                <div class="client-card" style="${client.Paused ? 'border: 1px solid var(--danger); opacity: 0.85;' : ''}">
                     <div class="client-header">
-                        <div class="client-name">${escapeHTML(client.Name)}</div>
+                        <div class="client-name">
+                            ${escapeHTML(client.Name)}
+                            ${client.Paused ? '<span style="background: var(--danger); color: white; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem; margin-left: 0.5rem; vertical-align: middle;">PAUSADO</span>' : ''}
+                        </div>
                         <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">Excluir</button>
                     </div>
                     
@@ -484,18 +492,42 @@
                             <div class="info-label">Assistant ID</div>
                             <div class="info-value">${escapeHTML(client.OpenAIAssistant)}</div>
                         </div>
+
+                        ${client.AudioReplyMessage ? `
+                        <div class="info-row" style="margin-top: 0.5rem;">
+                            <div class="info-label">Mensagem para Áudios</div>
+                            <div class="info-value" style="font-style: italic; font-size: 0.85rem;">"${escapeHTML(client.AudioReplyMessage)}"</div>
+                        </div>` : ''}
                         
                         <div style="display: flex; gap: 1rem; margin-top: 0.5rem; align-items: center;">
                             <div class="info-row" style="flex: 1;">
                                 <div class="info-label">Pausa Humano</div>
                                 <div class="info-value">${client.HumanPauseHours} horas</div>
                             </div>
-                            <button
-                                onclick="unpauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
-                                style="background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
-                                onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                ▶ Despausar Bot
-                            </button>
+                            <div style="display: flex; gap: 0.5rem;">
+                                ${client.Paused ? `
+                                <button
+                                    onclick="unpauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
+                                    style="background: linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                    onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    ▶ Retomar Bot
+                                </button>
+                                ` : `
+                                <button
+                                    onclick="pauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
+                                    style="background: linear-gradient(135deg,#f43f5e,#e11d48); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                    onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    ⏸️ Pausar Bot
+                                </button>
+                                `}
+                                <button
+                                    onclick="unpauseHuman(${client.ID}, '${escapeHTML(client.Name)}')"
+                                    style="background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                    title="Limpa as travas de humanos que atenderam chats"
+                                    onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                    🔄 Resetar Travas
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -526,7 +558,8 @@
                 OpenAIAssistant: document.getElementById('openaiAssistantId').value,
                 WahaURL: '',
                 WahaToken: '',
-                HumanPauseHours: parseInt(document.getElementById('humanPauseHours').value)
+                HumanPauseHours: parseInt(document.getElementById('humanPauseHours').value),
+                AudioReplyMessage: document.getElementById('audioReplyMessage').value
             };
 
             try {
@@ -563,7 +596,7 @@
             }
         }
 
-        async function unpauseClient(id, name) {
+        async function unpauseHuman(id, name) {
             try {
                 const response = await fetch(`${API_BASE}/api/clients/${id}/unpause`, {
                     method: 'POST',
@@ -571,8 +604,31 @@
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Erro desconhecido');
-                // Visual feedback
                 alert('✅ ' + data.message);
+                fetchClients();
+            } catch (error) {
+                alert('Erro ao resetar: ' + error.message);
+            }
+        }
+
+        async function pauseClient(id, name) {
+            if (!confirm('Deseja PAUSAR o robô para TODOS os contatos de ' + name + '?')) return;
+            try {
+                const response = await fetch(`${API_BASE}/api/clients/${id}/pause`, { method: 'POST' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Erro desconhecido');
+                fetchClients();
+            } catch (error) {
+                alert('Erro ao pausar: ' + error.message);
+            }
+        }
+
+        async function unpauseClient(id, name) {
+            try {
+                const response = await fetch(`${API_BASE}/api/clients/${id}/unpause`, { method: 'POST' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Erro desconhecido');
+                fetchClients();
             } catch (error) {
                 alert('Erro ao despausar: ' + error.message);
             }
