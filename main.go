@@ -324,10 +324,22 @@ func main() {
             qrReq.SetHeader("X-Api-Key", wahaToken)
             qrReq.SetHeader("Authorization", "Bearer "+wahaToken)
         }
-        resp, err := qrReq.Get(wahaURL + "/api/sessions/" + sessionName + "/auth/qr")
+        
+        // In some WAHA versions the route is /api/{session}/auth/qr, in others it's /api/sessions/{session}/auth/qr
+        // Let's try /api/{session}/auth/qr first
+        resp, err := qrReq.Get(wahaURL + "/api/" + sessionName + "/auth/qr")
         if err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao conectar com WAHA"})
             return
+        }
+
+        // Fallback if 404
+        if resp.StatusCode() == 404 {
+            resp, err = qrReq.Get(wahaURL + "/api/sessions/" + sessionName + "/auth/qr")
+            if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao conectar com WAHA"})
+                return
+            }
         }
 
         if resp.IsError() {
