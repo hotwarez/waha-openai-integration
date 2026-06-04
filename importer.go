@@ -2,13 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"mime/multipart"
-	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
