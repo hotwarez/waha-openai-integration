@@ -325,11 +325,33 @@
 
     <div class="header">
         <h1>WAHA Bridge - Control Panel</h1>
+        <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; align-items: center;">
+            <span id="currentUserInfo" style="color: var(--text-muted); font-size: 0.9rem;"></span>
+            <button class="btn btn-danger" style="padding: 0.4rem 1rem; font-size: 0.8rem;" onclick="logout()">Sair</button>
+        </div>
+        <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center;" id="navTabs">
+            <button class="btn" style="background-color: var(--card-bg);" id="btnTabClients" onclick="switchTab('clients')">Clientes</button>
+            <button class="btn" style="background-color: transparent;" id="btnTabUsers" onclick="switchTab('users')" style="display:none;">Usuários</button>
+        </div>
+
         <p style="color: var(--text-muted); margin-top: 0.5rem;">SaaS Multi-Tenant Management</p>
     </div>
 
     <div class="container">
-        <div class="top-bar">
+        
+        <div id="users-section" style="display: none;">
+            <div class="top-bar">
+                <div>
+                    <h2 style="font-size: 1.5rem; font-weight: 600;">Gerenciar Usuários</h2>
+                    <p style="color: var(--text-muted); margin-top: 0.25rem;">Total de Usuários: <span id="user-count">0</span></p>
+                </div>
+                <button class="btn" onclick="openUserModal()">+ Novo Usuário</button>
+            </div>
+            <div class="clients-grid" id="users-grid">
+                <!-- Users loaded here -->
+            </div>
+        </div>
+<div id="clients-section"><div class="top-bar">
             <h2>Clients (<span id="client-count">0</span>)</h2>
             <div>
                 <button class="btn" onclick="openGlobalSettings()" style="background-color: #8b5cf6; margin-right: 1rem;">
@@ -434,6 +456,51 @@
         </div>
     </div>
 
+    
+    <!-- User Modal -->
+    <div class="modal-overlay" id="userModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="userModalTitle">Novo Usuário</h2>
+                <button class="close-btn" onclick="closeUserModal()">&times;</button>
+            </div>
+            <form id="userForm" onsubmit="saveUser(event)">
+                <input type="hidden" id="userId">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="userUsername" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Senha (Deixe em branco para não alterar)</label>
+                    <input type="password" id="userPassword" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Papel (Role)</label>
+                    <select id="userRole" class="form-control">
+                        <option value="user">Usuário</option>
+                        <option value="admin">Administrador (Acesso Total)</option>
+                    </select>
+                </div>
+                <div id="userPermissionsGroup">
+                    <div class="form-group">
+                        <label>Clientes Permitidos (IDs separados por vírgula, ex: 1,2,3)</label>
+                        <input type="text" id="userAllowedClients" class="form-control" placeholder="1,2,3">
+                        <small style="color: var(--text-muted);">Deixe em branco para nenhum. Admin ignora isso.</small>
+                    </div>
+                    <div style="display:flex; gap:1rem; margin-bottom: 1rem;">
+                        <label><input type="checkbox" id="userCanEdit"> Editar/Excluir</label>
+                        <label><input type="checkbox" id="userCanPause"> Pausar/Despausar</label>
+                        <label><input type="checkbox" id="userCanViewQR"> Ver QR Code</label>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeUserModal()">Cancelar</button>
+                    <button type="submit" class="btn">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- QR Code Modal -->
     <div class="modal-overlay" id="qrModal">
         <div class="modal" style="text-align: center; max-width: 400px;">
@@ -455,7 +522,151 @@
         let clientsData = [];
 
         // Fetch clients on load
-        document.addEventListener('DOMContentLoaded', fetchClients);
+        
+        let currentUser = null;
+        let usersData = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await fetchMe();
+            await fetchClients();
+            if (currentUser && currentUser.Role === 'admin') {
+                document.getElementById('btnTabUsers').style.display = 'inline-block';
+                await fetchUsers();
+            }
+        });
+
+        async function fetchMe() {
+            try {
+                const res = await fetch(`${API_BASE}/api/me`);
+                if (!res.ok) {
+                    window.location.href = '/login';
+                    return;
+                }
+                currentUser = await res.json();
+                document.getElementById('currentUserInfo').innerText = `Logado como: ${currentUser.Username} (${currentUser.Role})`;
+                
+                // Hide global settings button if not admin
+                if (currentUser.Role !== 'admin') {
+                    const btnSettings = document.querySelector('button[onclick="openSettingsModal()"]');
+                    if (btnSettings) btnSettings.style.display = 'none';
+                    
+                    const btnNewClient = document.querySelector('button[onclick="openModal()"]');
+                    if (btnNewClient && !currentUser.CanEdit) btnNewClient.style.display = 'none';
+                }
+            } catch (e) {
+                window.location.href = '/login';
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+
+        function switchTab(tab) {
+            if (tab === 'clients') {
+                document.getElementById('clients-section').style.display = 'block';
+                document.getElementById('users-section').style.display = 'none';
+                document.getElementById('btnTabClients').style.backgroundColor = 'var(--card-bg)';
+                document.getElementById('btnTabUsers').style.backgroundColor = 'transparent';
+            } else {
+                document.getElementById('clients-section').style.display = 'none';
+                document.getElementById('users-section').style.display = 'block';
+                document.getElementById('btnTabClients').style.backgroundColor = 'transparent';
+                document.getElementById('btnTabUsers').style.backgroundColor = 'var(--card-bg)';
+            }
+        }
+
+        // --- Users API ---
+        async function fetchUsers() {
+            try {
+                const res = await fetch(`${API_BASE}/api/users`);
+                usersData = await res.json();
+                renderUsers();
+            } catch (e) { console.error(e); }
+        }
+
+        function renderUsers() {
+            const grid = document.getElementById('users-grid');
+            document.getElementById('user-count').innerText = usersData.length;
+            if (usersData.length === 0) { grid.innerHTML = '<p>Nenhum usuário.</p>'; return; }
+
+            grid.innerHTML = usersData.map(u => `
+                <div class="client-card">
+                    <div class="client-header">
+                        <div class="client-name">${escapeHTML(u.Username)} <span style="font-size:0.8rem; color:var(--primary)">(${u.Role})</span></div>
+                        <div style="display:flex; gap:0.5rem;">
+                            <button class="btn" style="padding:0.4rem;" onclick='editUser(${JSON.stringify(u)})'>✏️</button>
+                            <button class="btn btn-danger" style="padding:0.4rem;" onclick="deleteUser(${u.ID})">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="client-info">
+                        <div class="info-row"><div class="info-label">Allowed Clients</div><div class="info-value">${u.AllowedClients || '[]'}</div></div>
+                        <div class="info-row"><div class="info-label">Permissions</div>
+                            <div class="info-value" style="font-size:0.8rem">
+                                Edit: ${u.CanEdit ? '✅' : '❌'} | Pause: ${u.CanPause ? '✅' : '❌'} | QR: ${u.CanViewQR ? '✅' : '❌'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openUserModal() {
+            document.getElementById('userForm').reset();
+            document.getElementById('userId').value = '';
+            document.getElementById('userModalTitle').innerText = 'Novo Usuário';
+            document.getElementById('userModal').classList.add('active');
+        }
+
+        function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
+
+        function editUser(u) {
+            document.getElementById('userId').value = u.ID;
+            document.getElementById('userUsername').value = u.Username;
+            document.getElementById('userRole').value = u.Role;
+            document.getElementById('userAllowedClients').value = u.AllowedClients.replace(/[\[\]"]/g, '') || '';
+            document.getElementById('userCanEdit').checked = u.CanEdit;
+            document.getElementById('userCanPause').checked = u.CanPause;
+            document.getElementById('userCanViewQR').checked = u.CanViewQR;
+            document.getElementById('userModalTitle').innerText = 'Editar Usuário';
+            document.getElementById('userModal').classList.add('active');
+        }
+
+        async function saveUser(e) {
+            e.preventDefault();
+            let arr = document.getElementById('userAllowedClients').value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+            const payload = {
+                ID: parseInt(document.getElementById('userId').value) || 0,
+                Username: document.getElementById('userUsername').value,
+                Password: document.getElementById('userPassword').value,
+                Role: document.getElementById('userRole').value,
+                AllowedClients: JSON.stringify(arr),
+                CanEdit: document.getElementById('userCanEdit').checked,
+                CanPause: document.getElementById('userCanPause').checked,
+                CanViewQR: document.getElementById('userCanViewQR').checked
+            };
+            try {
+                const res = await fetch(`${API_BASE}/api/users`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if(!res.ok) throw new Error((await res.json()).error);
+                closeUserModal();
+                fetchUsers();
+            } catch(err) { alert(err.message); }
+        }
+
+        async function deleteUser(id) {
+            if(!confirm('Excluir este usuário?')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/users/${id}`, { method: 'DELETE' });
+                if(!res.ok) throw new Error((await res.json()).error);
+                fetchUsers();
+            } catch(err) { alert(err.message); }
+        }
+
 
         async function fetchClients() {
             try {
@@ -495,8 +706,11 @@
                             ${escapeHTML(client.Name)}
                             ${client.Paused ? '<span style="background: var(--danger); color: white; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem; margin-left: 0.5rem; vertical-align: middle;">PAUSADO</span>' : ''}
                         </div>
-                        <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">Excluir</button>
+                        
+                        ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanEdit)) ? 
+                        `<button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">Excluir</button>` : ''}
                     </div>
+
                     
                     <div class="client-info">
                         <div class="webhook-box">
@@ -511,12 +725,15 @@
                                 <div class="info-label">Sessão WAHA</div>
                                 <div class="info-value" style="font-family: monospace;">${escapeHTML(client.WahaSession)}</div>
                             </div>
+                            
+                            ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanViewQR)) ? `
                             <button
                                 onclick="showQR(${client.ID})"
                                 style="background: linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
                                 onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
                                 📱 Conectar / QR Code
-                            </button>
+                            </button>` : ''}
+
                         </div>
                         
                         <div class="info-row" style="margin-top: 0.5rem;">
@@ -535,8 +752,9 @@
                                 <div class="info-label">Pausa Humano</div>
                                 <div class="info-value">${client.HumanPauseHours} horas</div>
                             </div>
+                            
                             <div style="display: flex; gap: 0.5rem;">
-                                ${client.Paused ? `
+                                ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanPause)) ? (client.Paused ? `
                                 <button
                                     onclick="unpauseClient(${client.ID}, '${escapeHTML(client.Name)}')"
                                     style="background: linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
@@ -550,14 +768,15 @@
                                     onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
                                     ⏸️ Pausar Bot
                                 </button>
-                                `}
+                                `) : ''}
+                                ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanPause)) ? `
                                 <button
                                     onclick="unpauseHuman(${client.ID}, '${escapeHTML(client.Name)}')"
                                     style="background: linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
                                     title="Limpa as travas de humanos que atenderam chats"
                                     onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
                                     🔄 Resetar Travas
-                                </button>
+                                </button>` : ''}
                             </div>
                         </div>
                     </div>

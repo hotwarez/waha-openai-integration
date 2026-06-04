@@ -1,7 +1,10 @@
 package main
 
 import (
-    "bytes"
+    "crypto/rand"
+    "crypto/sha256"
+    "encoding/hex"
+    "encoding/json"
     "embed"
     "fmt"
     "html/template"
@@ -31,7 +34,61 @@ var (
     client        = resty.New()
     sentBotMsgs   sync.Map // Map[msgID]bool
     humanPauses   sync.Map // Map[chatID]time.Time
+    activeSessions sync.Map // Map[string]uint (token -> userID)
 )
+
+func hashPassword(password string) string {
+    h := sha256.New()
+    h.Write([]byte(password + "waha_saas_salt"))
+    return hex.EncodeToString(h.Sum(nil))
+}
+
+func generateSessionToken() string {
+    b := make([]byte, 32)
+    rand.Read(b)
+    return hex.EncodeToString(b)
+}
+
+func authMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        token, err := c.Cookie("session_token")
+        if err != nil || token == "" {
+            c.Redirect(http.StatusFound, "/login")
+            c.Abort()
+            return
+        }
+        userIDIf, ok := activeSessions.Load(token)
+        if !ok {
+            c.Redirect(http.StatusFound, "/login")
+            c.Abort()
+            return
+        }
+        var user User
+        if err := DB.First(&user, userIDIf.(uint)).Error; err != nil {
+            c.Redirect(http.StatusFound, "/login")
+            c.Abort()
+            return
+        }
+        c.Set("user", user)
+        c.Next()
+    }
+}
+
+func hasAccess(user User, clientID uint) bool {
+    if user.Role == "admin" {
+        return true
+    }
+    var allowed []uint
+    if err := json.Unmarshal([]byte(user.AllowedClients), &allowed); err != nil {
+        return false
+    }
+    for _, id := range allowed {
+        if id == clientID {
+            return true
+        }
+    }
+    return false
+}
 
 func loadConfig() Config {
     _ = godotenv.Load()
@@ -51,33 +108,123 @@ func main() {
     initDB()
     cfg := loadConfig()
 
+    var userCount int64
+    DB.Model(&User{}).Count(&userCount)
+    if userCount == 0 {
+        DB.Create(&User{
+            Username: "admin",
+            PasswordHash: hashPassword(cfg.AdminPassword),
+            Role: "admin",
+        })
+        log.Println("Created default admin user.")
+    }
+
     r := gin.Default()
     templ := template.Must(template.New("").ParseFS(templatesFS, "templates/*"))
     r.SetHTMLTemplate(templ)
 
+    // Public Auth Routes
+    r.GET("/login", func(c *gin.Context) {
+        c.HTML(http.StatusOK, "login.html", nil)
+    })
+    
+    r.GET("/", func(c *gin.Context) {
+        c.Redirect(http.StatusFound, "/admin")
+    })
+
+    r.POST("/api/login", func(c *gin.Context) {
+        var req struct {
+            Username string `json:"username"`
+            Password string `json:"password"`
+        }
+        if err := c.BindJSON(&req); err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+            return
+        }
+        var u User
+        if err := DB.Where("username = ?", req.Username).First(&u).Error; err != nil {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário ou senha incorretos"})
+            return
+        }
+        if u.PasswordHash != hashPassword(req.Password) {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário ou senha incorretos"})
+            return
+        }
+        
+        token := generateSessionToken()
+        activeSessions.Store(token, u.ID)
+        c.SetCookie("session_token", token, 86400, "/", "", false, true)
+        c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
+    })
+
+    r.POST("/api/logout", func(c *gin.Context) {
+        token, _ := c.Cookie("session_token")
+        if token != "" {
+            activeSessions.Delete(token)
+        }
+        c.SetCookie("session_token", "", -1, "/", "", false, true)
+        c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
+    })
+
     // Admin Panel Routes (Protected)
-    adminGroup := r.Group("/admin", gin.BasicAuth(gin.Accounts{
-        "admin": cfg.AdminPassword,
-    }))
+    adminGroup := r.Group("/admin", authMiddleware())
     adminGroup.GET("", func(c *gin.Context) {
         c.HTML(http.StatusOK, "admin.html", nil)
     })
 
     // API Routes (Protected)
-    api := r.Group("/api", gin.BasicAuth(gin.Accounts{
-        "admin": cfg.AdminPassword,
-    }))
+    api := r.Group("/api", authMiddleware())
+    
+    api.GET("/me", func(c *gin.Context) {
+        userObj, _ := c.Get("user")
+        c.JSON(http.StatusOK, userObj.(User))
+    })
     api.GET("/clients", func(c *gin.Context) {
-        var clients []Client
-        DB.Find(&clients)
-        c.JSON(http.StatusOK, clients)
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+
+        var allClients []Client
+        DB.Find(&allClients)
+
+        if user.Role == "admin" {
+            c.JSON(http.StatusOK, allClients)
+            return
+        }
+
+        var allowed []uint
+        _ = json.Unmarshal([]byte(user.AllowedClients), &allowed)
+        
+        var filtered []Client
+        for _, cl := range allClients {
+            for _, id := range allowed {
+                if cl.ID == id {
+                    filtered = append(filtered, cl)
+                    break
+                }
+            }
+        }
+        c.JSON(http.StatusOK, filtered)
     })
     api.POST("/clients", func(c *gin.Context) {
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+        if user.Role != "admin" && !user.CanEdit {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+
         var client Client
         if err := c.BindJSON(&client); err != nil {
             c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
             return
         }
+
+        // Check if editing an existing client and has access
+        if client.ID != 0 && !hasAccess(user, client.ID) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem acesso a este cliente"})
+            return
+        }
+
         client.WebhookSlug = strings.ToLower(strings.ReplaceAll(client.WebhookSlug, " ", "-"))
         if err := DB.Save(&client).Error; err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save: " + err.Error()})
@@ -86,13 +233,31 @@ func main() {
         c.JSON(http.StatusOK, client)
     })
     api.DELETE("/clients/:id", func(c *gin.Context) {
-        id := c.Param("id")
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+        if user.Role != "admin" && !user.CanEdit {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+        id, _ := strconv.Atoi(c.Param("id"))
+        if !hasAccess(user, uint(id)) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+
         DB.Delete(&Client{}, id)
         c.Status(http.StatusOK)
     })
 
     api.POST("/clients/:id/unpause", func(c *gin.Context) {
-        id := c.Param("id")
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+        id, _ := strconv.Atoi(c.Param("id"))
+        if !hasAccess(user, uint(id)) || (user.Role != "admin" && !user.CanPause) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+
         var cl Client
         if err := DB.First(&cl, id).Error; err != nil {
             c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
@@ -112,7 +277,14 @@ func main() {
     })
 
     api.GET("/clients/:id/qr", func(c *gin.Context) {
-        id := c.Param("id")
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+        id, _ := strconv.Atoi(c.Param("id"))
+        if !hasAccess(user, uint(id)) || (user.Role != "admin" && !user.CanViewQR) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+
         var cl Client
         if err := DB.First(&cl, id).Error; err != nil {
             c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
@@ -167,7 +339,14 @@ func main() {
     })
 
     api.POST("/clients/:id/pause", func(c *gin.Context) {
-        id := c.Param("id")
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+        id, _ := strconv.Atoi(c.Param("id"))
+        if !hasAccess(user, uint(id)) || (user.Role != "admin" && !user.CanPause) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+
         var cl Client
         if err := DB.First(&cl, id).Error; err != nil {
             c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
@@ -178,23 +357,99 @@ func main() {
     })
 
     api.GET("/settings", func(c *gin.Context) {
-        var setting GlobalSetting
-        DB.FirstOrCreate(&setting, GlobalSetting{ID: 1})
-        c.JSON(http.StatusOK, setting)
+        userObj, _ := c.Get("user")
+        if userObj.(User).Role != "admin" {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+        var global GlobalSetting
+        DB.FirstOrCreate(&global, GlobalSetting{ID: 1})
+        c.JSON(http.StatusOK, global)
     })
-
     api.POST("/settings", func(c *gin.Context) {
-        var setting GlobalSetting
-        if err := c.BindJSON(&setting); err != nil {
+        userObj, _ := c.Get("user")
+        if userObj.(User).Role != "admin" {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+        var global GlobalSetting
+        if err := c.BindJSON(&global); err != nil {
             c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
             return
         }
-        setting.ID = 1 // Always force ID 1 for global settings
-        if err := DB.Save(&setting).Error; err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save settings: " + err.Error()})
+        global.ID = 1
+        DB.Save(&global)
+        c.JSON(http.StatusOK, global)
+    })
+
+    // User Management API
+    api.GET("/users", func(c *gin.Context) {
+        userObj, _ := c.Get("user")
+        if userObj.(User).Role != "admin" {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
             return
         }
-        c.JSON(http.StatusOK, setting)
+        var users []User
+        DB.Select("id, username, role, allowed_clients, can_edit, can_pause, can_view_qr, can_view_settings").Find(&users)
+        c.JSON(http.StatusOK, users)
+    })
+    
+    api.POST("/users", func(c *gin.Context) {
+        userObj, _ := c.Get("user")
+        if userObj.(User).Role != "admin" {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+        var req struct {
+            ID             uint   `json:"ID"`
+            Username       string `json:"Username"`
+            Password       string `json:"Password"` // plain text, optional if edit
+            Role           string `json:"Role"`
+            AllowedClients string `json:"AllowedClients"`
+            CanEdit        bool   `json:"CanEdit"`
+            CanPause       bool   `json:"CanPause"`
+            CanViewQR      bool   `json:"CanViewQR"`
+        }
+        if err := c.BindJSON(&req); err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+            return
+        }
+        
+        var u User
+        if req.ID != 0 {
+            DB.First(&u, req.ID)
+        }
+        u.Username = req.Username
+        u.Role = req.Role
+        u.AllowedClients = req.AllowedClients
+        u.CanEdit = req.CanEdit
+        u.CanPause = req.CanPause
+        u.CanViewQR = req.CanViewQR
+        
+        if req.Password != "" {
+            u.PasswordHash = hashPassword(req.Password)
+        }
+
+        if err := DB.Save(&u).Error; err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        c.JSON(http.StatusOK, gin.H{"message": "User saved"})
+    })
+    
+    api.DELETE("/users/:id", func(c *gin.Context) {
+        userObj, _ := c.Get("user")
+        if userObj.(User).Role != "admin" {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+        id := c.Param("id")
+        if id == strconv.Itoa(int(userObj.(User).ID)) {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "Não pode deletar a si mesmo"})
+            return
+        }
+        DB.Delete(&User{}, id)
+        c.Status(http.StatusOK)
     })
 
     // Dynamic Webhook
