@@ -391,7 +391,7 @@ func main() {
             return
         }
         var users []User
-        DB.Select("id, username, role, allowed_clients, can_edit, can_pause, can_view_qr, can_view_settings").Find(&users)
+        DB.Select("id, username, role, allowed_clients, can_edit, can_pause, can_view_qr").Find(&users)
         c.JSON(http.StatusOK, users)
     })
     
