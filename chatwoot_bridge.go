@@ -31,13 +31,13 @@ func sendLiveMessageToChatwoot(client Client, chatID, text string, fromMe bool, 
 
     // Prepare API URL and headers
     apiURL := fmt.Sprintf("%s/api/v1/accounts/%d", cwURL, client.ChatwootAccountID)
-    clientReq := resty.New().R().
+    cwClient := resty.New().
         SetHeader("api_access_token", cwToken).
         SetHeader("Content-Type", "application/json")
 
     // 1. Check or Create Contact
     phone := strings.Split(chatID, "@")[0]
-    searchResp, err := clientReq.Clone().Get(apiURL + "/contacts/search?q=" + phone)
+    searchResp, err := cwClient.R().Get(apiURL + "/contacts/search?q=" + phone)
     if err != nil {
         log.Printf("Chatwoot: failed to search contact: %v", err)
         return
@@ -59,7 +59,7 @@ func sendLiveMessageToChatwoot(client Client, chatID, text string, fromMe bool, 
             "name":         phone,
             "phone_number": "+" + phone,
         }
-        createResp, err := clientReq.Clone().SetBody(createBody).Post(apiURL + "/contacts")
+        createResp, err := cwClient.R().SetBody(createBody).Post(apiURL + "/contacts")
         if err != nil {
             log.Printf("Chatwoot: failed to create contact: %v", err)
             return
@@ -76,7 +76,7 @@ func sendLiveMessageToChatwoot(client Client, chatID, text string, fromMe bool, 
     }
 
     // 2. Check or Create Conversation
-    convResp, err := clientReq.Clone().Get(fmt.Sprintf("%s/conversations?inbox_id=%d", apiURL, client.ChatwootInboxID))
+    convResp, err := cwClient.R().Get(fmt.Sprintf("%s/conversations?inbox_id=%d", apiURL, client.ChatwootInboxID))
     if err != nil {
         log.Printf("Chatwoot: failed to get conversations: %v", err)
         return
@@ -110,7 +110,7 @@ func sendLiveMessageToChatwoot(client Client, chatID, text string, fromMe bool, 
             "inbox_id":   client.ChatwootInboxID,
             "contact_id": contactID,
         }
-        createConvResp, err := clientReq.Clone().SetBody(createConvBody).Post(apiURL + "/conversations")
+        createConvResp, err := cwClient.R().SetBody(createConvBody).Post(apiURL + "/conversations")
         if err != nil {
             log.Printf("Chatwoot: failed to create conversation: %v", err)
             return
@@ -141,7 +141,7 @@ func sendLiveMessageToChatwoot(client Client, chatID, text string, fromMe bool, 
         msgBody["created_at"] = time.Unix(timestamp, 0).Format(time.RFC3339)
     }
 
-    _, err = clientReq.Clone().SetBody(msgBody).Post(fmt.Sprintf("%s/conversations/%d/messages", apiURL, int(conversationID)))
+    _, err = cwClient.R().SetBody(msgBody).Post(fmt.Sprintf("%s/conversations/%d/messages", apiURL, int(conversationID)))
     if err != nil {
         log.Printf("Chatwoot: failed to push message: %v", err)
     }
