@@ -182,6 +182,7 @@ func sendMessage(cfg Config, chatID, text string) {
         SetHeader("Content-Type", "application/json")
     if cfg.WahaToken != "" {
         r.SetHeader("Authorization", "Bearer "+cfg.WahaToken)
+        r.SetHeader("X-Api-Key", cfg.WahaToken)
     }
     resp, err := r.SetBody(payload).
         Post(cfg.WahaURL + "/api/sendText")
