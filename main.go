@@ -38,7 +38,7 @@ var client = resty.New()
 func main() {
     cfg := loadConfig()
     if cfg.WahaURL == "" || cfg.OpenAIKey == "" {
-        log.Fatal("WAHA_URL and OPENAI_API_KEY must be set")
+        log.Printf("WARNING: WAHA_URL or OPENAI_API_KEY is empty! Environment variables were not passed correctly by Portainer.")
     }
     r := gin.Default()
     r.POST("/webhook", func(c *gin.Context) {
