@@ -384,6 +384,7 @@
             <form id="clientForm" onsubmit="saveClient(event)">
                 <input type="hidden" id="clientId">
                 
+                <input type="hidden" id="clientId" value="">
                 <div class="form-group">
                     <label for="name">Nome da Empresa / Cliente *</label>
                     <input type="text" id="name" class="form-control" required placeholder="Ex: Clínica Enlace">
@@ -801,8 +802,11 @@
         async function saveClient(e) {
             e.preventDefault();
             
+            
             const payload = {
+                ID: parseInt(document.getElementById('clientId').value) || 0,
                 Name: document.getElementById('name').value,
+
                 WebhookSlug: document.getElementById('webhookSlug').value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
                 WahaSession: document.getElementById('wahaSession').value,
                 OpenAIKey: document.getElementById('openaiKey').value,
