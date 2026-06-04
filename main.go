@@ -46,8 +46,15 @@ func main() {
             return
         }
         // Extract relevant fields (adjust according to WAHA schema)
-        chatID, _ := payload["chatId"].(string)
-        text, _ := payload["text"].(string)
+        var chatID, text string
+        if innerPayload, ok := payload["payload"].(map[string]interface{}); ok {
+            chatID, _ = innerPayload["from"].(string)
+            text, _ = innerPayload["body"].(string)
+        } else {
+            // Fallback for simple testing
+            chatID, _ = payload["chatId"].(string)
+            text, _ = payload["text"].(string)
+        }
         if chatID == "" || text == "" {
             c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
             return
