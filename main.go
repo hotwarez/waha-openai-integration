@@ -419,8 +419,32 @@ func main() {
         }
 
         if resp.IsError() {
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "WAHA retornou erro: " + resp.String()})
-            return
+            bodyStr := resp.String()
+            // Auto-restart if session is FAILED
+            if strings.Contains(bodyStr, "FAILED") || strings.Contains(bodyStr, "restart") {
+                // Stop the session
+                stopReq := resty.New().R()
+                if wahaToken != "" {
+                    stopReq.SetHeader("X-Api-Key", wahaToken)
+                    stopReq.SetHeader("Authorization", "Bearer "+wahaToken)
+                }
+                stopReq.SetBody(map[string]interface{}{"name": sessionName})
+                stopReq.Post(wahaURL + "/api/sessions/stop")
+                
+                // Start again
+                startReq.Post(wahaURL + "/api/sessions/start")
+                
+                // Try to get QR again
+                resp, err = qrReq.Get(wahaURL + "/api/" + sessionName + "/auth/qr")
+                if err == nil && resp.StatusCode() == 404 {
+                    resp, err = qrReq.Get(wahaURL + "/api/sessions/" + sessionName + "/auth/qr")
+                }
+            }
+            
+            if err != nil || resp.IsError() {
+                c.JSON(http.StatusInternalServerError, gin.H{"error": "WAHA retornou erro: " + resp.String()})
+                return
+            }
         }
 
         // Return WAHA's response directly to frontend (usually {"session": "...", "mimetype": "...", "data": "..."} or {"url": "..."})

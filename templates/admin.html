@@ -796,7 +796,7 @@
                             
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanEdit)) ? `
-                                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: var(--primary);" onclick='editClient(${JSON.stringify(client)})'>✏️ Editar</button>
+                                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: var(--primary);" onclick="editClient(${client.ID})">✏️ Editar</button>
                                 <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: #8b5cf6;" onclick='openImportModal(${client.ID}, "${escapeHTML(client.Name)}")'>📥 Importar</button>
                                 <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">🗑️</button>` : ''}
                             </div>
@@ -984,6 +984,24 @@
         // Modal Functions
         const modal = document.getElementById('clientModal');
         const form = document.getElementById('clientForm');
+
+        
+        function editClient(id) {
+            const client = clientsData.find(c => c.ID === id);
+            if (!client) return;
+            document.getElementById('clientId').value = client.ID;
+            document.getElementById('name').value = client.Name;
+            document.getElementById('webhookSlug').value = client.WebhookSlug;
+            document.getElementById('wahaSession').value = client.WahaSession;
+            document.getElementById('openaiKey').value = client.OpenAIKey;
+            document.getElementById('openaiAssistantId').value = client.OpenAIAssistant;
+            document.getElementById('humanPauseHours').value = client.HumanPauseHours;
+            document.getElementById('audioReplyMessage').value = client.AudioReplyMessage || '';
+            document.getElementById('cwAccount').value = client.ChatwootAccountID || 1;
+            document.getElementById('cwInbox').value = client.ChatwootInboxID || '';
+            document.getElementById('modalTitle').innerText = 'Editar Cliente';
+            document.getElementById('clientModal').classList.add('active');
+        }
 
         function openModal() {
             form.reset();
