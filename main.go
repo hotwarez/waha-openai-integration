@@ -8,6 +8,7 @@ import (
     "net/http"
     "os"
     "strconv"
+    "strings"
     "time"
     "github.com/gin-gonic/gin"
     "github.com/joho/godotenv"
@@ -16,20 +17,22 @@ import (
 )
 
 type Config struct {
-    WahaURL       string
-    WahaToken     string
-    OpenAIKey     string
-    UseResponses  bool
+    WahaURL         string
+    WahaToken       string
+    OpenAIKey       string
+    OpenAIAssistant string
+    UseResponsesAPI bool
 }
 
 func loadConfig() Config {
     _ = godotenv.Load()
     useResp, _ := strconv.ParseBool(os.Getenv("USE_RESPONSES_API"))
     return Config{
-        WahaURL:      os.Getenv("WAHA_URL"),
-        WahaToken:    os.Getenv("WAHA_TOKEN"),
-        OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
-        UseResponses: useResp,
+        WahaURL:         strings.TrimSpace(os.Getenv("WAHA_URL")),
+        WahaToken:       strings.TrimSpace(os.Getenv("WAHA_TOKEN")),
+        OpenAIKey:       strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+        OpenAIAssistant: strings.TrimSpace(os.Getenv("OPENAI_ASSISTANT_ID")),
+        UseResponsesAPI: useResp,
     }
 }
 
