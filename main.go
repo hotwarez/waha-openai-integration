@@ -100,6 +100,7 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     // 2. Add user message to thread
     resp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+        SetHeader("OpenAI-Beta", "assistants=v2").
         SetHeader("Content-Type", "application/json").
         SetBody(map[string]interface{}{"role": "user", "content": userMsg}).
         Post("https://api.openai.com/v1/threads/" + threadID + "/messages")
@@ -109,6 +110,7 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     // 3. Create a run
     runResp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+        SetHeader("OpenAI-Beta", "assistants=v2").
         SetHeader("Content-Type", "application/json").
         SetBody(map[string]interface{}{"assistant_id": os.Getenv("OPENAI_ASSISTANT_ID")}).
         Post("https://api.openai.com/v1/threads/" + threadID + "/runs")
@@ -120,6 +122,7 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     for {
         statusResp, err := client.R().
             SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+            SetHeader("OpenAI-Beta", "assistants=v2").
             Get("https://api.openai.com/v1/threads/" + threadID + "/runs/" + runID)
         if err != nil { return "", err }
         if statusResp.IsError() { return "", fmt.Errorf("OpenAI status error: %s", statusResp.String()) }
@@ -133,6 +136,7 @@ func handleMessage(cfg Config, chatID, userMsg string) (string, error) {
     // 5. Retrieve assistant messages
     msgsResp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+        SetHeader("OpenAI-Beta", "assistants=v2").
         Get("https://api.openai.com/v1/threads/" + threadID + "/messages")
     if err != nil { return "", err }
     if msgsResp.IsError() { return "", fmt.Errorf("OpenAI messages error: %s", msgsResp.String()) }
@@ -157,6 +161,7 @@ func getOrCreateThread(cfg Config, chatID string) (string, error) {
     // Create new thread via OpenAI
     resp, err := client.R().
         SetHeader("Authorization", "Bearer "+cfg.OpenAIKey).
+        SetHeader("OpenAI-Beta", "assistants=v2").
         SetHeader("Content-Type", "application/json").
         SetBody(map[string]interface{}{}).
         Post("https://api.openai.com/v1/threads")
