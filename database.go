@@ -19,6 +19,12 @@ type Client struct {
     HumanPauseHours   int    `gorm:"default:24"`
 }
 
+type GlobalSetting struct {
+    ID        uint   `gorm:"primaryKey"`
+    WahaURL   string
+    WahaToken string
+}
+
 var DB *gorm.DB
 
 func initDB() {
@@ -35,7 +41,7 @@ func initDB() {
     }
 
     // Auto Migrate the schema
-    err = DB.AutoMigrate(&Client{})
+    err = DB.AutoMigrate(&Client{}, &GlobalSetting{})
     if err != nil {
         log.Fatalf("failed to migrate database: %v", err)
     }

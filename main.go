@@ -91,6 +91,26 @@ func main() {
         c.Status(http.StatusOK)
     })
 
+    api.GET("/settings", func(c *gin.Context) {
+        var setting GlobalSetting
+        DB.FirstOrCreate(&setting, GlobalSetting{ID: 1})
+        c.JSON(http.StatusOK, setting)
+    })
+
+    api.POST("/settings", func(c *gin.Context) {
+        var setting GlobalSetting
+        if err := c.BindJSON(&setting); err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+            return
+        }
+        setting.ID = 1 // Always force ID 1 for global settings
+        if err := DB.Save(&setting).Error; err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save settings: " + err.Error()})
+            return
+        }
+        c.JSON(http.StatusOK, setting)
+    })
+
     // Dynamic Webhook
     r.POST("/webhook/:slug", func(c *gin.Context) {
         slug := c.Param("slug")
@@ -275,14 +295,32 @@ func sendMessage(client Client, session, chatID, text string) {
         "text":    text,
         "session": session,
     }
+    
+    // Determine WAHA config (fallback to GlobalSetting if client has none)
+    wahaURL := client.WahaURL
+    wahaToken := client.WahaToken
+    if wahaURL == "" {
+        var global GlobalSetting
+        DB.FirstOrCreate(&global, GlobalSetting{ID: 1})
+        wahaURL = global.WahaURL
+        if client.WahaToken == "" {
+            wahaToken = global.WahaToken
+        }
+    }
+
+    if wahaURL == "" {
+        log.Printf("WAHA Send Error: WAHA URL is not configured locally or globally!")
+        return
+    }
+
     r := resty.New().R().
         SetHeader("Content-Type", "application/json")
-    if client.WahaToken != "" {
-        r.SetHeader("Authorization", "Bearer "+client.WahaToken)
-        r.SetHeader("X-Api-Key", client.WahaToken)
+    if wahaToken != "" {
+        r.SetHeader("Authorization", "Bearer "+wahaToken)
+        r.SetHeader("X-Api-Key", wahaToken)
     }
     resp, err := r.SetBody(payload).
-        Post(client.WahaURL + "/api/sendText")
+        Post(wahaURL + "/api/sendText")
     if err != nil {
         log.Printf("WAHA Send Error: %v", err)
     } else {

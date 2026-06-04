@@ -329,8 +329,10 @@
     </div>
 
     <div class="container">
-        <div class="top-bar">
-            <h2>Clients (<span id="client-count">0</span>)</h2>
+            <button class="btn" onclick="openGlobalSettings()" style="background-color: #8b5cf6; margin-right: 1rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                Configurações Globais
+            </button>
             <button class="btn" onclick="openModal()">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 Novo Cliente
@@ -377,15 +379,7 @@
                     <input type="text" id="openaiAssistantId" class="form-control" required placeholder="asst_...">
                 </div>
                 
-                <div class="form-group">
-                    <label for="wahaUrl">WAHA URL *</label>
-                    <input type="url" id="wahaUrl" class="form-control" required placeholder="https://waha3.whatscorporativo.com">
-                </div>
-                
-                <div class="form-group">
-                    <label for="wahaToken">WAHA Token</label>
-                    <input type="text" id="wahaToken" class="form-control" placeholder="Token de autenticação (opcional)">
-                </div>
+                <!-- WAHA fields removed for global WAHA config -->
 
                 <div class="form-group">
                     <label for="humanPauseHours">Horas de Pausa p/ Atendimento Humano *</label>
@@ -395,6 +389,34 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
                     <button type="submit" class="btn">Salvar Cliente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Global Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Configurações Globais (WAHA)</h2>
+                <button class="close-btn" onclick="closeSettingsModal()">&times;</button>
+            </div>
+            
+            <form id="settingsForm" onsubmit="saveSettings(event)">
+                <div class="form-group">
+                    <label for="globalWahaUrl">WAHA URL Global *</label>
+                    <input type="url" id="globalWahaUrl" class="form-control" required placeholder="https://waha.whatscorporativo.com">
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block;">Esta URL será usada para TODOS os clientes cadastrados.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="globalWahaToken">WAHA Token Global</label>
+                    <input type="text" id="globalWahaToken" class="form-control" placeholder="Token de autenticação (opcional)">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeSettingsModal()">Cancelar</button>
+                    <button type="submit" class="btn" style="background-color: #8b5cf6;">Salvar Configurações</button>
                 </div>
             </form>
         </div>
@@ -458,11 +480,6 @@
                             <div class="info-value">${escapeHTML(client.OpenAIAssistant)}</div>
                         </div>
                         
-                        <div class="info-row">
-                            <div class="info-label">WAHA URL</div>
-                            <div class="info-value">${escapeHTML(client.WahaURL)}</div>
-                        </div>
-                        
                         <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                             <div class="info-row" style="flex: 1;">
                                 <div class="info-label">Pausa Humano</div>
@@ -496,8 +513,8 @@
                 WebhookSlug: document.getElementById('webhookSlug').value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
                 OpenAIKey: document.getElementById('openaiKey').value,
                 OpenAIAssistant: document.getElementById('openaiAssistantId').value,
-                WahaURL: document.getElementById('wahaUrl').value,
-                WahaToken: document.getElementById('wahaToken').value,
+                WahaURL: '',
+                WahaToken: '',
                 HumanPauseHours: parseInt(document.getElementById('humanPauseHours').value)
             };
 
@@ -554,6 +571,54 @@
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
         });
+
+        // Global Settings Modal Functions
+        const settingsModal = document.getElementById('settingsModal');
+
+        async function openGlobalSettings() {
+            settingsModal.classList.add('active');
+            try {
+                const response = await fetch(`${API_BASE}/api/settings`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('globalWahaUrl').value = data.WahaURL || '';
+                    document.getElementById('globalWahaToken').value = data.WahaToken || '';
+                }
+            } catch (error) {
+                console.error('Error fetching settings:', error);
+            }
+        }
+
+        function closeSettingsModal() {
+            settingsModal.classList.remove('active');
+        }
+
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) closeSettingsModal();
+        });
+
+        async function saveSettings(e) {
+            e.preventDefault();
+            const payload = {
+                WahaURL: document.getElementById('globalWahaUrl').value,
+                WahaToken: document.getElementById('globalWahaToken').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) throw new Error('Failed to save settings');
+                
+                closeSettingsModal();
+                alert('Configurações Globais salvas com sucesso!');
+            } catch (error) {
+                alert('Erro: ' + error.message);
+            }
+        }
 
         // Basic HTML escaping
         function escapeHTML(str) {
