@@ -1074,11 +1074,33 @@
         }
 
         async function showQR(id) {
-            currentQrClientId = id;
-            const content = document.getElementById('qrContent');
-            content.innerHTML = '<p>Conectando ao WAHA para gerar o QR Code...</p>';
+            const qrContainer = document.getElementById('qrCodeContainer');
+            qrContainer.innerHTML = '<p style="color: var(--text-muted);">Gerando QR Code... Aguarde.</p>';
             document.getElementById('qrModal').classList.add('active');
-            await refreshQR();
+
+            try {
+                const res = await fetch(`${API_BASE}/api/clients/${id}/qr`);
+                const contentType = res.headers.get("content-type");
+                
+                if (contentType && contentType.includes("image")) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    qrContainer.innerHTML = `<img src="${url}" alt="QR Code" style="max-width: 100%; border-radius: 8px;">`;
+                } else {
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
+
+                    if (data.mimetype && data.data) {
+                        qrContainer.innerHTML = `<img src="data:${data.mimetype};base64,${data.data}" alt="QR Code" style="max-width: 100%; border-radius: 8px;">`;
+                    } else if (data.url) {
+                        qrContainer.innerHTML = `<img src="${data.url}" alt="QR Code" style="max-width: 100%; border-radius: 8px;">`;
+                    } else {
+                        qrContainer.innerHTML = `<p style="color: var(--text-muted); font-size: 0.9rem;">Resposta recebida:<br><br><pre style="white-space: pre-wrap; font-size: 0.8rem; background: var(--bg-color); padding: 1rem; border-radius: 8px;">${JSON.stringify(data, null, 2)}</pre></p>`;
+                    }
+                }
+            } catch (err) {
+                qrContainer.innerHTML = `<p style="color: var(--danger);">Erro: ${err.message}</p>`;
+            }
         }
 
         async function refreshQR() {
