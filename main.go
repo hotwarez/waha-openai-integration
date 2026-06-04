@@ -289,7 +289,14 @@ func getOrCreateThread(client Client, chatID string) (string, error) {
     // We isolate thread IDs per client
     path := "threads/" + client.WebhookSlug + "_" + chatID + ".txt"
     if data, err := os.ReadFile(path); err == nil {
-        return string(data), nil
+        threadID := strings.TrimSpace(string(data))
+        // Validate the stored thread ID — corrupted/empty files cause cryptic OpenAI errors
+        if strings.HasPrefix(threadID, "thread_") {
+            return threadID, nil
+        }
+        // File exists but is invalid, delete it and create a new thread
+        log.Printf("Deleting corrupted thread file: %s (content: '%s')", path, threadID)
+        os.Remove(path)
     }
     // Create new thread via OpenAI
     resp, err := resty.New().R().
@@ -299,7 +306,11 @@ func getOrCreateThread(client Client, chatID string) (string, error) {
         SetBody(map[string]interface{}{}).
         Post("https://api.openai.com/v1/threads")
     if err != nil { return "", err }
+    if resp.IsError() { return "", fmt.Errorf("failed to create thread: %s", resp.String()) }
     threadID := gjson.GetBytes(resp.Body(), "id").String()
+    if !strings.HasPrefix(threadID, "thread_") {
+        return "", fmt.Errorf("unexpected thread ID from OpenAI: '%s'", threadID)
+    }
     os.MkdirAll("threads", 0755)
     os.WriteFile(path, []byte(threadID), 0644)
     return threadID, nil
