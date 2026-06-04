@@ -705,6 +705,10 @@ func main() {
         log.Printf("[%s] OpenAI reply generated: %s", slug, reply)
         // Send reply via WAHA
         sendMessage(client, session, chatID, reply)
+        
+        // Send Bot's reply to Chatwoot
+        go sendLiveMessageToChatwoot(client, chatID, reply, true, time.Now().Unix())
+        
         log.Printf("[%s] Reply sent to WAHA.", slug)
         c.Status(http.StatusOK)
     })
