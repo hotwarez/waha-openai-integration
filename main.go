@@ -53,7 +53,7 @@ func main() {
             return
         }
         // Extract relevant fields (adjust according to WAHA schema)
-        var chatID, text string
+        var chatID, text, session string
         if innerPayload, ok := payload["payload"].(map[string]interface{}); ok {
             chatID, _ = innerPayload["from"].(string)
             text, _ = innerPayload["body"].(string)
@@ -62,7 +62,11 @@ func main() {
             chatID, _ = payload["chatId"].(string)
             text, _ = payload["text"].(string)
         }
-        log.Printf("Parsed chatID: '%s', text: '%s'", chatID, text)
+        session, _ = payload["session"].(string)
+        if session == "" {
+            session = "default"
+        }
+        log.Printf("Parsed session: '%s', chatID: '%s', text: '%s'", session, chatID, text)
         if chatID == "" || text == "" {
             log.Printf("Error: missing chatID or text")
             c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
@@ -74,13 +78,13 @@ func main() {
         if err != nil {
             log.Printf("OpenAI error: %v", err)
             // Send generic error back to user
-            sendMessage(cfg, chatID, "Desculpe, ocorreu um erro ao processar sua mensagem.")
+            sendMessage(cfg, session, chatID, "Desculpe, ocorreu um erro ao processar sua mensagem.")
             c.Status(http.StatusOK)
             return
         }
         log.Printf("OpenAI reply generated: %s", reply)
         // Send reply via WAHA
-        sendMessage(cfg, chatID, reply)
+        sendMessage(cfg, session, chatID, reply)
         log.Printf("Reply sent to WAHA.")
         c.Status(http.StatusOK)
     })
@@ -172,11 +176,11 @@ func getOrCreateThread(cfg Config, chatID string) (string, error) {
     return threadID, nil
 }
 
-func sendMessage(cfg Config, chatID, text string) {
+func sendMessage(cfg Config, session, chatID, text string) {
     payload := map[string]string{
-        "chatId": chatID,
-        "text":   text,
-        "session": "default",
+        "chatId":  chatID,
+        "text":    text,
+        "session": session,
     }
     r := client.R().
         SetHeader("Content-Type", "application/json")
