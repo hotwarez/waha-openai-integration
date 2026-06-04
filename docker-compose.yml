@@ -14,4 +14,7 @@ services:
       - USE_RESPONSES_API=false
     restart: unless-stopped
     volumes:
-      - ./threads:/app/threads
+      - waha_threads:/app/threads
+
+volumes:
+  waha_threads:
