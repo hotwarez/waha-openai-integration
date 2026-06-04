@@ -12,6 +12,7 @@ type Client struct {
     ID                 uint   `gorm:"primaryKey"`
     Name               string `gorm:"not null"`
     WebhookSlug        string `gorm:"uniqueIndex;not null"`
+    WahaSession        string
     WahaURL            string
     WahaToken          string
     OpenAIKey          string

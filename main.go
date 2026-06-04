@@ -111,6 +111,61 @@ func main() {
         c.JSON(http.StatusOK, gin.H{"message": "Bot despausado para " + cl.Name})
     })
 
+    api.GET("/clients/:id/qr", func(c *gin.Context) {
+        id := c.Param("id")
+        var cl Client
+        if err := DB.First(&cl, id).Error; err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+            return
+        }
+        
+        var global GlobalSetting
+        DB.FirstOrCreate(&global, GlobalSetting{ID: 1})
+        if global.WahaURL == "" {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "WAHA URL global não configurada"})
+            return
+        }
+
+        sessionName := cl.WahaSession
+        if sessionName == "" {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "Sessão WAHA não configurada para este cliente"})
+            return
+        }
+
+        wahaURL := strings.TrimRight(global.WahaURL, "/")
+        wahaToken := global.WahaToken
+
+        // 1. Try to start the session in case it's stopped/doesn't exist
+        startReq := resty.New().R().
+            SetHeader("Content-Type", "application/json")
+        if wahaToken != "" {
+            startReq.SetHeader("X-Api-Key", wahaToken)
+            startReq.SetHeader("Authorization", "Bearer "+wahaToken)
+        }
+        startReq.SetBody(map[string]interface{}{"name": sessionName})
+        startReq.Post(wahaURL + "/api/sessions/start") // Best effort, ignore errors
+
+        // 2. Fetch QR Code
+        qrReq := resty.New().R()
+        if wahaToken != "" {
+            qrReq.SetHeader("X-Api-Key", wahaToken)
+            qrReq.SetHeader("Authorization", "Bearer "+wahaToken)
+        }
+        resp, err := qrReq.Get(wahaURL + "/api/sessions/" + sessionName + "/auth/qr")
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao conectar com WAHA"})
+            return
+        }
+
+        if resp.IsError() {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "WAHA retornou erro: " + resp.String()})
+            return
+        }
+
+        // Return WAHA's response directly to frontend (usually {"session": "...", "mimetype": "...", "data": "..."} or {"url": "..."})
+        c.Data(resp.StatusCode(), resp.Header().Get("Content-Type"), resp.Body())
+    })
+
     api.POST("/clients/:id/pause", func(c *gin.Context) {
         id := c.Param("id")
         var cl Client
