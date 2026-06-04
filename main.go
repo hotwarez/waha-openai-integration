@@ -250,6 +250,50 @@ func main() {
         c.Status(http.StatusOK)
     })
 
+    api.POST("/clients/:id/restart-waha", func(c *gin.Context) {
+        userObj, _ := c.Get("user")
+        user := userObj.(User)
+        id, _ := strconv.Atoi(c.Param("id"))
+        if !hasAccess(user, uint(id)) || (user.Role != "admin" && !user.CanEdit) {
+            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
+            return
+        }
+
+        var cl Client
+        if err := DB.First(&cl, id).Error; err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
+            return
+        }
+
+        var global GlobalSetting
+        DB.FirstOrCreate(&global, GlobalSetting{ID: 1})
+        wahaURL := strings.TrimRight(global.WahaURL, "/")
+        wahaToken := global.WahaToken
+
+        req := resty.New().R()
+        if wahaToken != "" {
+            req.SetHeader("X-Api-Key", wahaToken)
+            req.SetHeader("Authorization", "Bearer "+wahaToken)
+        }
+        
+        // 1. Stop session
+        req.SetBody(map[string]interface{}{"name": cl.WahaSession})
+        req.Post(wahaURL + "/api/sessions/stop")
+        
+        // 2. Start session
+        resp, err := req.Post(wahaURL + "/api/sessions/start")
+        if err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao reiniciar sessão WAHA"})
+            return
+        }
+        
+        if resp.IsError() {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro do WAHA ao iniciar: " + resp.String()})
+            return
+        }
+        c.JSON(http.StatusOK, gin.H{"message": "Sessão WAHA reiniciada com sucesso"})
+    })
+
     api.POST("/clients/:id/unpause", func(c *gin.Context) {
         userObj, _ := c.Get("user")
         user := userObj.(User)

@@ -669,6 +669,19 @@
         }
 
 
+        
+        async function restartWaha(id) {
+            if(!confirm('Tem certeza que deseja forçar o reinício da sessão no WAHA? Isso pode demorar alguns segundos.')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/clients/${id}/restart-waha`, { method: 'POST' });
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.error || 'Erro ao reiniciar');
+                alert(data.message);
+            } catch(err) {
+                alert(err.message);
+            }
+        }
+
         async function fetchClients() {
             try {
                 const response = await fetch(`${API_BASE}/api/clients`);
@@ -726,6 +739,15 @@
                                 <div class="info-label">Sessão WAHA</div>
                                 <div class="info-value" style="font-family: monospace;">${escapeHTML(client.WahaSession)}</div>
                             </div>
+
+                            ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanViewQR)) ? `
+                            <button
+                                onclick="restartWaha(${client.ID})"
+                                style="background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; padding:0.5rem 0.9rem; border-radius:8px; font-size:0.8rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.4rem; white-space:nowrap; transition: opacity 0.2s;"
+                                onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                🔄 Reiniciar Sessão WAHA
+                            </button>` : ''}
+
                             
                             ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanViewQR)) ? `
                             <button
