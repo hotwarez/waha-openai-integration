@@ -6,8 +6,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - WAHA_URL=http://waha:8000
-      - WAHA_TOKEN=
+      - PORT=8080
+      - WAHA_URL=${WAHA_URL}
+      - WAHA_TOKEN=${WAHA_TOKEN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID}
       - USE_RESPONSES_API=false
