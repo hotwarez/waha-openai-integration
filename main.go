@@ -566,6 +566,8 @@ func main() {
     })
 
     // Dynamic Webhook
+    setupChatwootWebhook(r)
+
     r.POST("/webhook/:slug", func(c *gin.Context) {
         slug := c.Param("slug")
         var client Client
@@ -624,6 +626,15 @@ func main() {
         log.Printf("[%s] Parsed session: '%s', chatID: '%s', text: '%s', fromMe: %v", slug, session, chatID, text, fromMe)
         
         pauseKey := slug + ":" + chatID
+
+        // Send incoming to Chatwoot Live Bridge
+        var ts int64
+        if timestampFloat, ok := payload["timestamp"].(float64); ok {
+            ts = int64(timestampFloat)
+        }
+        if !fromMe && text != "" {
+            go sendLiveMessageToChatwoot(client, chatID, text, false, ts)
+        }
 
         // Handle fromMe (Human Handoff detection)
         if fromMe {
