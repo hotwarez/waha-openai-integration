@@ -417,8 +417,21 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="audioReplyMessage">Mensagem Automática para Áudios (Opcional)</label>
-                    <input type="text" id="audioReplyMessage" class="form-control" placeholder="Olá! Não consigo processar áudios. Por favor, envie texto.">
+                    <label for="audioReplyMessage">Mensagem Fixa para Áudios (opcional)</label>
+                    <input type="text" id="audioReplyMessage" class="form-control" placeholder="Desculpe, não consigo ouvir áudios.">
+                </div>
+                <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                    <h3 style="margin-bottom: 1rem; color: var(--primary); font-size: 1rem;">Chatwoot Importação Histórico</h3>
+                    <div style="display: flex; gap: 1rem;">
+                        <div style="flex: 1;">
+                            <label for="cwAccount">Account ID</label>
+                            <input type="number" id="cwAccount" class="form-control" placeholder="1" value="1">
+                        </div>
+                        <div style="flex: 1;">
+                            <label for="cwInbox">Inbox ID (Caixa de Entrada)</label>
+                            <input type="number" id="cwInbox" class="form-control" placeholder="ID da Caixa">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="modal-actions">
@@ -458,6 +471,32 @@
     </div>
 
     
+    
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">📥 Importar Histórico (<span id="importClientName"></span>)</h2>
+                <button class="close-btn" onclick="closeImportModal()">&times;</button>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+                Isso enviará as mensagens antigas da WAHA diretamente para o Chatwoot deste cliente.<br>
+                Atenção: Configure a Inbox ID do Chatwoot nas configurações do cliente antes de rodar isso.
+            </p>
+            <form id="importForm" onsubmit="startImport(event)">
+                <input type="hidden" id="importClientId">
+                <div class="form-group">
+                    <label>Importar conversas dos últimos X dias:</label>
+                    <input type="number" id="importDays" class="form-control" value="15" min="1" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeImportModal()">Cancelar</button>
+                    <button type="submit" class="btn">🚀 Iniciar Importação</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- User Modal -->
     <div class="modal-overlay" id="userModal">
         <div class="modal">
@@ -611,6 +650,39 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        
+        function openImportModal(id, name) {
+            document.getElementById('importClientId').value = id;
+            document.getElementById('importClientName').innerText = name;
+            document.getElementById('importDays').value = 15;
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.remove('active');
+        }
+
+        async function startImport(e) {
+            e.preventDefault();
+            const id = document.getElementById('importClientId').value;
+            const days = parseInt(document.getElementById('importDays').value) || 15;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/clients/${id}/import-chatwoot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Erro na requisição');
+                
+                alert(data.message);
+                closeImportModal();
+            } catch (err) {
+                alert(err.message);
+            }
         }
 
         function openUserModal() {
@@ -836,7 +908,9 @@
                 WahaURL: '',
                 WahaToken: '',
                 HumanPauseHours: parseInt(document.getElementById('humanPauseHours').value),
-                AudioReplyMessage: document.getElementById('audioReplyMessage').value
+                AudioReplyMessage: document.getElementById('audioReplyMessage').value,
+                ChatwootAccountID: parseInt(document.getElementById('cwAccount').value) || 1,
+                ChatwootInboxID: parseInt(document.getElementById('cwInbox').value) || 0
             };
 
             try {
