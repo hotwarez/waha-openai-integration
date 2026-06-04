@@ -3,7 +3,7 @@ WORKDIR /app
 RUN apk add --no-cache git
 COPY go.mod ./
 COPY main.go ./
-RUN go get ./... && go mod tidy
+RUN go mod tidy
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /waha-openai .
 
