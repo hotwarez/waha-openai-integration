@@ -48,7 +48,6 @@ func loadConfig() Config {
     }
 }
 
-var client = resty.New()
 
 func main() {
     cfg := loadConfig()
