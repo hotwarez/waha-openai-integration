@@ -185,6 +185,14 @@ func main() {
             c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
             return
         }
+
+        // Ignore Group Messages
+        if strings.HasSuffix(chatID, "@g.us") || strings.Contains(chatID, "-") {
+            log.Printf("[%s] Ignoring message from group chat: %s", slug, chatID)
+            c.Status(http.StatusOK)
+            return
+        }
+
         // Process with OpenAI
         log.Printf("[%s] Calling OpenAI for chatID: %s", slug, chatID)
         reply, err := handleMessage(client, chatID, text)
