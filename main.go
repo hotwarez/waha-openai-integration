@@ -21,17 +21,29 @@ type Config struct {
     WahaToken       string
     OpenAIKey       string
     OpenAIAssistant string
+    HumanPauseHours int
     UseResponsesAPI bool
 }
+
+var (
+    client        = resty.New()
+    sentBotMsgs   sync.Map // Map[msgID]bool
+    humanPauses   sync.Map // Map[chatID]time.Time
+)
 
 func loadConfig() Config {
     _ = godotenv.Load()
     useResp, _ := strconv.ParseBool(os.Getenv("USE_RESPONSES_API"))
+    pauseHours, err := strconv.Atoi(os.Getenv("HUMAN_PAUSE_HOURS"))
+    if err != nil || pauseHours <= 0 {
+        pauseHours = 24 // default 24h
+    }
     return Config{
         WahaURL:         strings.TrimSpace(os.Getenv("WAHA_URL")),
         WahaToken:       strings.TrimSpace(os.Getenv("WAHA_TOKEN")),
         OpenAIKey:       strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
         OpenAIAssistant: strings.TrimSpace(os.Getenv("OPENAI_ASSISTANT_ID")),
+        HumanPauseHours: pauseHours,
         UseResponsesAPI: useResp,
     }
 }
@@ -56,10 +68,16 @@ func main() {
             return
         }
         // Extract relevant fields (adjust according to WAHA schema)
-        var chatID, text, session string
+        var chatID, text, session, msgID string
+        var fromMe bool
         if innerPayload, ok := payload["payload"].(map[string]interface{}); ok {
             chatID, _ = innerPayload["from"].(string)
+            if innerPayload["to"] != nil && innerPayload["to"] != "" && innerPayload["fromMe"] == true {
+                chatID, _ = innerPayload["to"].(string) // when fromMe is true, the user is the 'to' field usually, but WAHA often puts chat in 'from' or 'to'. Let's check 'to'.
+            }
             text, _ = innerPayload["body"].(string)
+            fromMe, _ = innerPayload["fromMe"].(bool)
+            msgID, _ = innerPayload["id"].(string)
         } else {
             // Fallback for simple testing
             chatID, _ = payload["chatId"].(string)
@@ -69,7 +87,36 @@ func main() {
         if session == "" {
             session = "default"
         }
-        log.Printf("Parsed session: '%s', chatID: '%s', text: '%s'", session, chatID, text)
+        log.Printf("Parsed session: '%s', chatID: '%s', text: '%s', fromMe: %v", session, chatID, text, fromMe)
+        
+        // Handle fromMe (Human Handoff detection)
+        if fromMe {
+            if _, isBot := sentBotMsgs.Load(msgID); !isBot {
+                // Sent by a human agent!
+                log.Printf("Human intervention detected for chatID: %s", chatID)
+                humanPauses.Store(chatID, time.Now())
+            } else {
+                // It's just the bot's own message echoing back
+                // We can delete it from the map to free memory
+                sentBotMsgs.Delete(msgID)
+            }
+            c.Status(http.StatusOK)
+            return
+        }
+
+        // Check if user is currently paused
+        if pauseTimeIf, ok := humanPauses.Load(chatID); ok {
+            pauseTime := pauseTimeIf.(time.Time)
+            if time.Since(pauseTime) < time.Duration(cfg.HumanPauseHours)*time.Hour {
+                log.Printf("Ignoring message from %s (human pause active)", chatID)
+                c.Status(http.StatusOK)
+                return
+            } else {
+                // Pause expired
+                humanPauses.Delete(chatID)
+            }
+        }
+
         if chatID == "" || text == "" {
             log.Printf("Error: missing chatID or text")
             c.JSON(http.StatusBadRequest, gin.H{"error": "missing chatId or text"})
@@ -197,5 +244,15 @@ func sendMessage(cfg Config, session, chatID, text string) {
         log.Printf("WAHA Send Error: %v", err)
     } else {
         log.Printf("WAHA Send Response: %s", resp.String())
+        // Extract sent message ID to track it
+        sentID := gjson.GetBytes(resp.Body(), "id").String()
+        if sentID != "" {
+            sentBotMsgs.Store(sentID, true)
+            // auto cleanup after 5 minutes just in case webhook drops
+            go func(id string) {
+                time.Sleep(5 * time.Minute)
+                sentBotMsgs.Delete(id)
+            }(sentID)
+        }
     }
 }

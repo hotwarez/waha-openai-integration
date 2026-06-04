@@ -11,6 +11,7 @@ services:
       - WAHA_TOKEN=${WAHA_TOKEN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID}
+      - HUMAN_PAUSE_HOURS=${HUMAN_PAUSE_HOURS}
       - USE_RESPONSES_API=false
     restart: unless-stopped
     volumes:
