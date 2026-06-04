@@ -131,6 +131,14 @@ func main() {
             c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
             return
         }
+
+        // Only process actual chat messages — ignore session.status and other WAHA system events
+        eventType, _ := payload["event"].(string)
+        if eventType != "" && eventType != "message.any" {
+            log.Printf("[%s] Ignoring non-message event: %s", slug, eventType)
+            c.Status(http.StatusOK)
+            return
+        }
         // Extract relevant fields (adjust according to WAHA schema)
         var chatID, text, session, msgID string
         var fromMe bool
