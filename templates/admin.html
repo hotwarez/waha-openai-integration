@@ -494,36 +494,7 @@
 
     
     
-    <!-- Import Modal -->
-    <div class="modal-overlay" id="importModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2 class="modal-title">📥 Importar Histórico (<span id="importClientName"></span>)</h2>
-                <button class="close-btn" onclick="closeImportModal()">&times;</button>
-            </div>
-            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
-                Isso enviará as mensagens antigas da WAHA diretamente para o Chatwoot deste cliente.<br>
-                Atenção: Configure a Inbox ID do Chatwoot nas configurações do cliente antes de rodar isso.
-            </p>
-            <form id="importForm" onsubmit="startImport(event)">
-                <input type="hidden" id="importClientId">
-                <div class="form-group">
-                    <label>Importar conversas dos últimos X dias:</label>
-                    <input type="number" id="importDays" class="form-control" value="15" min="1" required>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-cancel" onclick="closeImportModal()">Cancelar</button>
-                    <button type="submit" class="btn">🚀 Iniciar Importação</button>
-                </div>
-            
-                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
-                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
-                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
-                </div>
-            </form>
-        </div>
-    </div>
+    
 
     <!-- User Modal -->
     <div class="modal-overlay" id="userModal">
@@ -585,8 +556,18 @@
             <div id="qrContent" style="padding: 20px 0;">
                 <p>Carregando QR Code...</p>
             </div>
-            <div class="modal-actions" style="justify-content: center;">
-                <button type="button" class="btn" onclick="refreshQR()" style="background-color: #3b82f6;">🔄 Atualizar QR Code</button>
+            <div class="modal-actions" style="justify-content: center; flex-direction: column; gap: 15px; margin-top: 0; width: 100%;">
+                <button type="button" class="btn" onclick="refreshQR()" style="background-color: #3b82f6; width: 100%;">🔄 Atualizar Status / QR Code</button>
+                
+                <div style="border-top: 1px solid var(--border-color); padding-top: 15px; text-align: left; width: 100%;">
+                    <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--primary);">📥 Importar Histórico</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Puxe as mensagens antigas do WhatsApp para o Chatwoot.</p>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="qrImportDays" class="form-control" value="15" min="1" max="365" style="width: 80px;" title="Dias">
+                        <span style="font-size: 0.9rem; color: var(--text-muted);">dias</span>
+                        <button type="button" class="btn" onclick="importFromQr(event)" style="flex: 1; background-color: #8b5cf6;">Importar Agora</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -831,7 +812,7 @@
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 ${(currentUser && (currentUser.Role === 'admin' || currentUser.CanEdit)) ? `
                                 <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: var(--primary);" onclick="editClient(${client.ID})">✏️ Editar</button>
-                                <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: #8b5cf6;" onclick='openImportModal(${client.ID}, "${escapeHTML(client.Name)}")'>📥 Importar</button>
+                                
                                 <button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteClient(${client.ID})">🗑️</button>` : ''}
                             </div>
                         </div>
@@ -1131,6 +1112,31 @@
         function closeQrModal() {
             document.getElementById('qrModal').classList.remove('active');
             currentQrClientId = null;
+        }
+
+                async function importFromQr(event) {
+            if (!currentQrClientId) return;
+            const days = parseInt(document.getElementById('qrImportDays').value) || 15;
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = 'Importando...';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/clients/${currentQrClientId}/import-chatwoot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Erro na requisição');
+                alert(data.message);
+                closeQrModal();
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
         }
 
         async function showQR(id) {
