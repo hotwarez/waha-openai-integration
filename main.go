@@ -276,6 +276,10 @@ func main() {
         var global GlobalSetting
         DB.FirstOrCreate(&global, GlobalSetting{ID: 1})
 
+        // Auto-pause bot to prevent AI from triggering during import
+        cl.Paused = true
+        DB.Save(&cl)
+
         // Run the import async
         go startChatwootImport(cl, global, req.Days)
 

@@ -1116,6 +1116,10 @@
 
                 async function importFromQr(event) {
             if (!currentQrClientId) return;
+
+            const confirmImport = confirm("⚠️ ATENÇÃO: O robô de IA será PAUSADO automaticamente durante a importação para evitar conflitos no WhatsApp.\n\nApós a importação terminar, você precisará ativá-lo MANUALMENTE aqui no painel.\n\nDeseja continuar?");
+            if (!confirmImport) return;
+
             const days = parseInt(document.getElementById('qrImportDays').value) || 15;
             const btn = event.target;
             const originalText = btn.innerText;
