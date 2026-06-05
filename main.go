@@ -659,11 +659,21 @@ func main() {
         
         pauseKey := slug + ":" + chatID
 
-        // Send incoming to Chatwoot Live Bridge
+        // Parse timestamp
         var ts int64
         if timestampFloat, ok := payload["timestamp"].(float64); ok {
             ts = int64(timestampFloat)
         }
+        
+        // Safety check: Ignore messages older than 5 minutes (300 seconds)
+        // This prevents WAHA native history sync from triggering AI replies
+        if ts > 0 && time.Now().Unix()-ts > 300 {
+            log.Printf("[%s] Ignoring old message (history sync). Chat: %s, Ts: %d", slug, chatID, ts)
+            c.Status(http.StatusOK)
+            return
+        }
+
+        // Send incoming to Chatwoot Live Bridge
         if !fromMe && text != "" {
             go sendLiveMessageToChatwoot(client, chatID, text, false, ts)
         }

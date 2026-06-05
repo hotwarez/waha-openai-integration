@@ -234,6 +234,25 @@ func setupChatwootWebhook(r *gin.Engine) {
             return
         }
 
+        // SAFETY LOCK: Block any message containing [Histórico: or [History:
+        // This prevents massive SPAM bans if a history sync triggers Chatwoot webhooks
+        if strings.Contains(content, "[Histórico:") || strings.Contains(content, "[History:") {
+            log.Printf("Chatwoot Webhook: Blocked imported history message from being sent to WhatsApp: %s", chatID)
+            c.Status(http.StatusOK)
+            return
+        }
+
+        // SAFETY LOCK 2: Block if message is old (from created_at attribute)
+        if createdAtStr, ok := payload["created_at"].(string); ok {
+            if createdAt, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
+                if time.Now().Sub(createdAt) > 5 * time.Minute {
+                    log.Printf("Chatwoot Webhook: Blocked old message from being sent to WhatsApp: %s", chatID)
+                    c.Status(http.StatusOK)
+                    return
+                }
+            }
+        }
+
         // Send to WAHA
         
         log.Printf("Chatwoot Webhook: sending '%s' to %s via session %s", content, chatID, client.WahaSession)

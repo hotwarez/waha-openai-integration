@@ -156,6 +156,12 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			if text == "" && !hasMedia {
 				continue
 			}
+
+			// Prepend [Histórico: DD/MM/YYYY HH:MM] - 
+			historyPrefix := fmt.Sprintf("[Histórico: %s] - ", time.Unix(timestamp, 0).Format("02/01/2006 15:04"))
+			if text != "" {
+				text = historyPrefix + text
+			}
 			
 			if !hasMedia {
 				cwClient.SetBody(map[string]interface{}{
@@ -199,7 +205,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 
 				// Send multipart
 				if text == "" {
-					text = "Mídia"
+					text = historyPrefix + "Mídia"
 				}
 				
 				_, err = resty.New().R().
@@ -218,7 +224,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			}
 			
 			// Small delay to prevent rate limiting
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(1500 * time.Millisecond) // 1.5s delay to prevent rate limit & spam
 		}
 		
 		log.Printf("[Importer] Completed chat %s", phoneNumber)
