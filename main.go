@@ -170,7 +170,7 @@ func main() {
     // Admin Panel Routes (Protected)
     adminGroup := r.Group("/admin", authMiddleware())
     adminGroup.GET("", func(c *gin.Context) {
-        c.HTML(http.StatusOK, "admin.html", nil)
+        c.HTML(http.StatusOK, "admin.html", gin.H{"Version": AppVersion})
     })
 
     // API Routes (Protected)
