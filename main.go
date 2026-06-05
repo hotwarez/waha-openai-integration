@@ -631,6 +631,17 @@ func main() {
             if innerPayload["to"] != nil && innerPayload["to"] != "" && innerPayload["fromMe"] == true {
                 chatID, _ = innerPayload["to"].(string)
             }
+            
+            // Extract real JID from _data.Info.SenderAlt if available (for LID resolution)
+            if _data, ok := innerPayload["_data"].(map[string]interface{}); ok {
+                if info, ok := _data["Info"].(map[string]interface{}); ok {
+                    senderAlt, _ := info["SenderAlt"].(string)
+                    if senderAlt != "" && strings.Contains(senderAlt, "@s.whatsapp.net") {
+                        chatID = strings.Replace(senderAlt, "@s.whatsapp.net", "@c.us", 1)
+                    }
+                }
+            }
+            
             text, _ = innerPayload["body"].(string)
             fromMe, _ = innerPayload["fromMe"].(bool)
             msgID, _ = innerPayload["id"].(string)

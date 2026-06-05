@@ -58,6 +58,7 @@ func sendLiveMessageToChatwoot(client Client, chatID, text string, fromMe bool, 
         createBody := map[string]interface{}{
             "name":         phone,
             "phone_number": "+" + phone,
+            "identifier":   chatID,
         }
         createResp, err := cwClient.R().SetBody(createBody).Post(apiURL + "/contacts")
         if err != nil {
@@ -205,11 +206,19 @@ func setupChatwootWebhook(r *gin.Engine) {
         }
         contactSender, _ := meta["sender"].(map[string]interface{})
         phoneNumber, _ := contactSender["phone_number"].(string) // +5511...
+        identifier, _ := contactSender["identifier"].(string)
         
-        if phoneNumber == "" {
+        var chatID string
+        if identifier != "" {
+            chatID = identifier
+        } else if phoneNumber != "" {
+            phoneWithoutPlus := strings.TrimPrefix(phoneNumber, "+")
+            chatID = phoneWithoutPlus + "@c.us"
+        } else {
             c.Status(http.StatusOK)
             return
         }
+
 
         // Find which client owns this Inbox ID
         var client Client
@@ -226,8 +235,6 @@ func setupChatwootWebhook(r *gin.Engine) {
         }
 
         // Send to WAHA
-        phoneWithoutPlus := strings.TrimPrefix(phoneNumber, "+")
-        chatID := phoneWithoutPlus + "@c.us"
         
         log.Printf("Chatwoot Webhook: sending '%s' to %s via session %s", content, chatID, client.WahaSession)
         sendMessage(client, client.WahaSession, chatID, content)
