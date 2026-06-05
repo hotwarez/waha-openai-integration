@@ -71,7 +71,10 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			continue
 		}
 
-		messages := gjson.ParseBytes(msgResp.Body()).Array()
+		messages := gjson.GetBytes(msgResp.Body(), "data").Array()
+		if len(messages) == 0 {
+			messages = gjson.ParseBytes(msgResp.Body()).Array()
+		}
 		var messagesToImport []gjson.Result
 
 		for _, msg := range messages {
