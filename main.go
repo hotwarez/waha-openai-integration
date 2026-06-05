@@ -23,6 +23,8 @@ import (
     "github.com/tidwall/gjson"
 )
 
+const AppVersion = "v1.0.7"
+
 type Config struct {
     UseResponsesAPI bool
     AdminPassword   string
