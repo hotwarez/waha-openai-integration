@@ -56,6 +56,12 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			continue // Skip groups
 		}
 		
+		// Optimization: Check chat's last message timestamp before fetching all its messages
+		chatTs := chat.Get("timestamp").Int()
+		if chatTs > 0 && chatTs < cutoffTime {
+			continue // Skip this chat entirely, no recent messages
+		}
+		
 		contactName := chat.Get("name").String()
 		if contactName == "" {
 			contactName = strings.Split(chatId, "@")[0]
