@@ -71,7 +71,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 		log.Printf("[Importer] Processing chat %s", phoneNumber)
 
 		// 2. Get Messages for this chat
-		msgResp, err := req.Get(fmt.Sprintf("%s/api/%s/chats/%s/messages?limit=1000", wahaURL, sessionName, chatId))
+		msgResp, err := req.Get(fmt.Sprintf("%s/api/%s/chats/%s/messages?limit=150", wahaURL, sessionName, chatId))
 		if err != nil || msgResp.IsError() {
 			log.Printf("[Importer] Failed to fetch messages for %s", chatId)
 			continue
@@ -140,9 +140,22 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 		if convResp != nil && !convResp.IsError() {
 			convID = gjson.GetBytes(convResp.Body(), "id").Int()
 		} else {
-			// Maybe it already exists, let's search it
-			log.Printf("[Importer] Warning: failed to create conversation, might already exist")
-			continue
+			// Search for existing conversation
+			searchConvResp, _ := cwClient.Get(fmt.Sprintf("%s/api/v1/accounts/%d/contacts/%d/conversations", cwURL, accountID, contactID))
+			if searchConvResp != nil && !searchConvResp.IsError() {
+				convs := gjson.GetBytes(searchConvResp.Body(), "payload").Array()
+				for _, c := range convs {
+					if c.Get("inbox_id").Int() == int64(inboxID) {
+						convID = c.Get("id").Int()
+						break
+					}
+				}
+			}
+			
+			if convID == 0 {
+				log.Printf("[Importer] Error: Could not find or create conversation for %s", phoneNumber)
+				continue
+			}
 		}
 
 		// 5. Send Messages in chronological order (reverse the slice if needed)
