@@ -178,7 +178,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			}
 
 			// Prepend [Histórico: DD/MM/YYYY HH:MM] - 
-			historyPrefix := fmt.Sprintf("[Histórico: %s] - ", time.Unix(timestamp, 0).Format("02/01/2006 15:04"))
+			historyPrefix := fmt.Sprintf("[Historico: %s] - ", time.Unix(timestamp, 0).Format("02/01/2006 15:04"))
 			if text != "" {
 				text = historyPrefix + text
 			}
@@ -199,7 +199,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 				if err != nil || mediaResp.IsError() {
 					// Fallback to text
 					cwClient.SetBody(map[string]interface{}{
-						"content": "📎 [Mídia não suportada na importação: " + text + "]",
+						"content": "[Midia nao suportada na importacao: " + text + "]",
 						"message_type": msgType,
 						"private": false,
 						"created_at": time.Unix(timestamp, 0).Format(time.RFC3339),
@@ -225,7 +225,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 
 				// Send multipart
 				if text == "" {
-					text = historyPrefix + "Mídia"
+					text = historyPrefix + "Midia"
 				}
 				
 				_, err = resty.New().R().
