@@ -455,7 +455,7 @@
                 <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
                     <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
                     <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
-                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
+                    <input type="text" id="globalBackendURL" class="form-control" placeholder="http://openai.whatscorporativo.com:8085" value="http://openai.whatscorporativo.com:8085">
                 </div>
 
                 <div class="modal-actions">
@@ -977,7 +977,7 @@
                     const data = await response.json();
                     document.getElementById('globalWahaUrl').value = data.WahaURL || '';
                     document.getElementById('globalWahaToken').value = data.WahaToken || '';
-                    document.getElementById('globalBackendURL').value = data.BackendURL || '';
+                    document.getElementById('globalBackendURL').value = data.BackendURL || 'http://openai.whatscorporativo.com:8085';
                 }
             } catch (error) {
                 console.error('Error fetching settings:', error);

@@ -23,7 +23,7 @@ import (
     "github.com/tidwall/gjson"
 )
 
-const AppVersion = "v1.1.10"
+const AppVersion = "v1.1.11"
 
 type Config struct {
     UseResponsesAPI bool
@@ -367,21 +367,25 @@ func main() {
                 
                 var g GlobalSetting
                 DB.First(&g, 1)
-                if g.BackendURL != "" {
-                    webhookURL := g.BackendURL
-                    if !strings.HasSuffix(webhookURL, "/") {
-                        webhookURL += "/"
-                    }
-                    webhookURL += "webhook/" + cl.WebhookSlug
-                    
-                    startBody["config"] = map[string]interface{}{
-                        "webhooks": []map[string]interface{}{
-                            {
-                                "url": webhookURL,
-                                "events": []string{"message", "message.any", "session.status"},
-                            },
+                
+                backendURL := g.BackendURL
+                if backendURL == "" {
+                    backendURL = "http://openai.whatscorporativo.com:8085"
+                }
+                
+                webhookURL := backendURL
+                if !strings.HasSuffix(webhookURL, "/") {
+                    webhookURL += "/"
+                }
+                webhookURL += "webhook/" + cl.WebhookSlug
+                
+                startBody["config"] = map[string]interface{}{
+                    "webhooks": []map[string]interface{}{
+                        {
+                            "url": webhookURL,
+                            "events": []string{"message", "message.any", "session.status"},
                         },
-                    }
+                    },
                 }
                 
                 startReq.SetBody(startBody)
