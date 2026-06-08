@@ -205,10 +205,15 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 				mimetype := msg.Get("media.mimetype").String()
 				mediaFilename := msg.Get("media.filename").String()
 
+				// DEBUG: log the raw message JSON to diagnose media fields
+				log.Printf("[Importer] DEBUG MEDIA msg id=%s mediaURL=%q mimetype=%q filename=%q raw=%s",
+					msgIdStr, mediaURL, mimetype, mediaFilename, msg.Raw)
+
 				// Strategy 1: use media.url directly from message (preferred when downloadMedia=true)
 				// Strategy 2: fallback to /messages/{id}/download endpoint
 				var mediaBytes []byte
 				var contentType string
+
 
 				if mediaURL != "" {
 					// The URL from WAHA may be relative (e.g. /api/files/...) - make it absolute
