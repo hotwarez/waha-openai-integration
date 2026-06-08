@@ -199,15 +199,46 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 					"private":      false,
 				}).Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations/%d/messages", cwURL, accountID, convID))
 			} else {
-				// Has media - try to download from WAHA
+				// Has media - WAHA returns media.url when downloadMedia=true is used
 				msgIdStr := msg.Get("id").String()
-				// URL-encode the message ID to handle special chars like "@"
-				encodedMsgId := url.PathEscape(msgIdStr)
+				mediaURL := msg.Get("media.url").String()
+				mimetype := msg.Get("media.mimetype").String()
+				mediaFilename := msg.Get("media.filename").String()
 
-				mediaResp, err := req.Get(wahaURL + "/api/" + sessionName + "/messages/" + encodedMsgId + "/download")
-				if err != nil || mediaResp.IsError() {
-					log.Printf("[Importer] Could not download media for msg %s (status %d), falling back to text", msgIdStr, mediaResp.StatusCode())
-					// Fallback: save as text note
+				// Strategy 1: use media.url directly from message (preferred when downloadMedia=true)
+				// Strategy 2: fallback to /messages/{id}/download endpoint
+				var mediaBytes []byte
+				var contentType string
+
+				if mediaURL != "" {
+					// The URL from WAHA may be relative (e.g. /api/files/...) - make it absolute
+					if strings.HasPrefix(mediaURL, "/") {
+						mediaURL = wahaURL + mediaURL
+					}
+					log.Printf("[Importer] Downloading media via media.url: %s", mediaURL)
+					mediaResp, dlErr := req.Get(mediaURL)
+					if dlErr == nil && !mediaResp.IsError() {
+						mediaBytes = mediaResp.Body()
+						contentType = mediaResp.Header().Get("Content-Type")
+					} else {
+						log.Printf("[Importer] media.url download failed (status %d), trying /download endpoint", mediaResp.StatusCode())
+					}
+				}
+
+				// Fallback: /messages/{id}/download
+				if len(mediaBytes) == 0 {
+					encodedMsgId := url.PathEscape(msgIdStr)
+					mediaResp, dlErr := req.Get(wahaURL + "/api/" + sessionName + "/messages/" + encodedMsgId + "/download")
+					if dlErr == nil && !mediaResp.IsError() {
+						mediaBytes = mediaResp.Body()
+						contentType = mediaResp.Header().Get("Content-Type")
+					} else {
+						log.Printf("[Importer] /download endpoint also failed (status %d) for msg %s", mediaResp.StatusCode(), msgIdStr)
+					}
+				}
+
+				if len(mediaBytes) == 0 {
+					// All download strategies failed - save as text placeholder
 					fallbackText := historyPrefix + "[Midia]"
 					if text != "" {
 						fallbackText = text
@@ -221,8 +252,12 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 					continue
 				}
 
-				// Detect content type and extension
-				contentType := mediaResp.Header().Get("Content-Type")
+				// Use mimetype from WAHA if available
+				if mimetype != "" && contentType == "" {
+					contentType = mimetype
+				}
+
+				// Determine content type and extension
 				if contentType == "" {
 					contentType = "application/octet-stream"
 				}
@@ -241,7 +276,11 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 					ext = ".pdf"
 				}
 
-				filename := "media_" + strconv.FormatInt(timestamp, 10) + ext
+				// Use original filename from WAHA if available, otherwise generate one
+				filename := mediaFilename
+				if filename == "" {
+					filename = "media_" + strconv.FormatInt(timestamp, 10) + ext
+				}
 
 				if text == "" {
 					text = historyPrefix + "Midia"
@@ -254,7 +293,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 						"message_type": strconv.Itoa(msgType),
 						"private":      "false",
 					}).
-					SetMultipartField("attachments[]", filename, contentType, bytes.NewReader(mediaResp.Body())).
+					SetMultipartField("attachments[]", filename, contentType, bytes.NewReader(mediaBytes)).
 					Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations/%d/messages", cwURL, accountID, convID))
 
 				if uploadErr != nil {
