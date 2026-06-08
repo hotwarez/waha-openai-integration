@@ -20,16 +20,12 @@ type Client struct {
     HumanPauseHours    int    `gorm:"default:24"`
     Paused             bool   `gorm:"default:false"`
     AudioReplyMessage  string `gorm:"default:''"`
-    ChatwootAccountID  int    `gorm:"default:1"`
-    ChatwootInboxID    int
 }
 
 type GlobalSetting struct {
     ID             uint   `gorm:"primaryKey"`
     WahaURL        string
     WahaToken      string
-    ChatwootURL    string
-    ChatwootToken  string
     BackendURL     string
 }
 

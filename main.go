@@ -23,7 +23,7 @@ import (
     "github.com/tidwall/gjson"
 )
 
-const AppVersion = "v1.1.7"
+const AppVersion = "v1.1.8"
 
 type Config struct {
     UseResponsesAPI bool
@@ -252,41 +252,7 @@ func main() {
         c.Status(http.StatusOK)
     })
 
-    api.POST("/clients/:id/import-chatwoot", func(c *gin.Context) {
-        userObj, _ := c.Get("user")
-        user := userObj.(User)
-        id, _ := strconv.Atoi(c.Param("id"))
-        if !hasAccess(user, uint(id)) || (user.Role != "admin" && !user.CanEdit) {
-            c.JSON(http.StatusForbidden, gin.H{"error": "Sem permissão"})
-            return
-        }
 
-        var req struct {
-            Days int `json:"days"`
-        }
-        if err := c.BindJSON(&req); err != nil {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
-            return
-        }
-
-        var cl Client
-        if err := DB.First(&cl, id).Error; err != nil {
-            c.JSON(http.StatusNotFound, gin.H{"error": "client not found"})
-            return
-        }
-        
-        var global GlobalSetting
-        DB.FirstOrCreate(&global, GlobalSetting{ID: 1})
-
-        // Auto-pause bot to prevent AI from triggering during import
-        cl.Paused = true
-        DB.Save(&cl)
-
-        // Run the import async
-        go startChatwootImport(cl, global, req.Days)
-
-        c.JSON(http.StatusOK, gin.H{"message": "Importação iniciada em background! Isso pode levar algum tempo dependendo da quantidade de conversas."})
-    })
 
     api.POST("/clients/:id/restart-waha", func(c *gin.Context) {
         userObj, _ := c.Get("user")
