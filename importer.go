@@ -80,7 +80,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 	// ----------------------------------------------------------------------------------
 
 	// 1. Get Chats
-	resp, err = req.Get(wahaURL + "/api/" + sessionName + "/chats")
+	resp, err := req.Get(wahaURL + "/api/" + sessionName + "/chats")
 	if err != nil || resp.IsError() {
 		log.Printf("[Importer] Error fetching chats: %v", err)
 		return
