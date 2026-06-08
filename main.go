@@ -23,7 +23,7 @@ import (
     "github.com/tidwall/gjson"
 )
 
-const AppVersion = "v1.0.9"
+const AppVersion = "v1.1.0"
 
 type Config struct {
     UseResponsesAPI bool
@@ -592,8 +592,7 @@ func main() {
         c.Status(http.StatusOK)
     })
 
-    // Dynamic Webhook
-    setupChatwootWebhook(r)
+    
 
     r.POST("/webhook/:slug", func(c *gin.Context) {
         slug := c.Param("slug")
@@ -679,11 +678,6 @@ func main() {
             return
         }
 
-        // Send incoming to Chatwoot Live Bridge
-        if !fromMe && text != "" {
-            go sendLiveMessageToChatwoot(client, chatID, text, false, ts)
-        }
-
         // Handle fromMe (Human Handoff detection)
         if fromMe {
             if _, isBot := sentBotMsgs.Load(msgID); !isBot {
@@ -753,10 +747,7 @@ func main() {
         log.Printf("[%s] OpenAI reply generated: %s", slug, reply)
         // Send reply via WAHA
         sendMessage(client, session, chatID, reply)
-        
-        // Send Bot's reply to Chatwoot
-        go sendLiveMessageToChatwoot(client, chatID, reply, true, time.Now().Unix())
-        
+                
         log.Printf("[%s] Reply sent to WAHA.", slug)
         c.Status(http.StatusOK)
     })
