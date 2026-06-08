@@ -426,12 +426,6 @@
                     <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancelar</button>
                     <button type="submit" class="btn">Salvar Cliente</button>
                 </div>
-            
-                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
-                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
-                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
-                </div>
             </form>
         </div>
     </div>
@@ -458,15 +452,15 @@
                   
 
 
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-cancel" onclick="closeSettingsModal()">Cancelar</button>
-                    <button type="submit" class="btn" style="background-color: #8b5cf6;">Salvar Configurações</button>
-                </div>
-            
                 <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
                     <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
                     <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
                     <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeSettingsModal()">Cancelar</button>
+                    <button type="submit" class="btn" style="background-color: #8b5cf6;">Salvar Configurações</button>
                 </div>
             </form>
         </div>
@@ -515,12 +509,6 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeUserModal()">Cancelar</button>
                     <button type="submit" class="btn">Salvar</button>
-                </div>
-            
-                <div class="form-group" style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-                    <h3 style="margin-bottom: 1rem; color: var(--primary);">Webhook (Global)</h3>
-                    <label for="globalBackendURL">URL Pública do Sistema (ex: https://meu-painel.com)</label>
-                    <input type="text" id="globalBackendURL" class="form-control" placeholder="Necessário para auto-registrar Webhooks no WAHA">
                 </div>
             </form>
         </div>
@@ -867,9 +855,7 @@
                 WahaURL: '',
                 WahaToken: '',
                 HumanPauseHours: parseInt(document.getElementById('humanPauseHours').value),
-                AudioReplyMessage: document.getElementById('audioReplyMessage').value,
-                ChatwootAccountID: parseInt(document.getElementById('cwAccount').value) || 1,
-                ChatwootInboxID: parseInt(document.getElementById('cwInbox').value) || 0
+                AudioReplyMessage: document.getElementById('audioReplyMessage').value
             };
 
             try {
@@ -960,8 +946,6 @@
             document.getElementById('openaiAssistantId').value = client.OpenAIAssistant;
             document.getElementById('humanPauseHours').value = client.HumanPauseHours;
             document.getElementById('audioReplyMessage').value = client.AudioReplyMessage || '';
-            document.getElementById('cwAccount').value = client.ChatwootAccountID || 1;
-            document.getElementById('cwInbox').value = client.ChatwootInboxID || '';
             document.getElementById('modalTitle').innerText = 'Editar Cliente';
             document.getElementById('clientModal').classList.add('active');
         }
@@ -993,8 +977,6 @@
                     const data = await response.json();
                     document.getElementById('globalWahaUrl').value = data.WahaURL || '';
                     document.getElementById('globalWahaToken').value = data.WahaToken || '';
-                    document.getElementById('globalChatwootURL').value = data.ChatwootURL || '';
-                    document.getElementById('globalChatwootToken').value = data.ChatwootToken || '';
                     document.getElementById('globalBackendURL').value = data.BackendURL || '';
                 }
             } catch (error) {
@@ -1015,8 +997,6 @@
             const payload = {
                 WahaURL: document.getElementById('globalWahaUrl').value,
                 WahaToken: document.getElementById('globalWahaToken').value,
-                ChatwootURL: document.getElementById('globalChatwootURL').value,
-                ChatwootToken: document.getElementById('globalChatwootToken').value,
                 BackendURL: document.getElementById('globalBackendURL').value
             };
 
