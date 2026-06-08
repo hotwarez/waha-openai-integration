@@ -1,10 +1,10 @@
 package main
 
 import (
-	"net/url"
 	"bytes"
 	"fmt"
 	"log"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -56,13 +56,13 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 		if strings.HasSuffix(chatId, "@g.us") || strings.Contains(chatId, "-") {
 			continue // Skip groups
 		}
-		
-		// Optimization: Check chat's last message timestamp before fetching all its messages
+
+		// Skip chats with no recent messages
 		chatTs := chat.Get("timestamp").Int()
 		if chatTs > 0 && chatTs < cutoffTime {
-			continue // Skip this chat entirely, no recent messages
+			continue
 		}
-		
+
 		contactName := chat.Get("name").String()
 		if contactName == "" {
 			contactName = strings.Split(chatId, "@")[0]
@@ -71,7 +71,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 
 		log.Printf("[Importer] Processing chat %s", phoneNumber)
 
-		// 2. Get Messages for this chat
+		// 2. Get Messages for this chat (with downloadMedia=true)
 		msgResp, err := req.Get(fmt.Sprintf("%s/api/%s/chats/%s/messages?limit=150&downloadMedia=true", wahaURL, sessionName, chatId))
 		if err != nil || msgResp.IsError() {
 			log.Printf("[Importer] Failed to fetch messages for %s", chatId)
@@ -103,7 +103,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			SetHeader("Content-Type", "application/json")
 
 		searchResp, _ := cwClient.Get(fmt.Sprintf("%s/api/v1/accounts/%d/contacts/search?q=%s", cwURL, accountID, strings.Split(chatId, "@")[0]))
-		
+
 		contactID := int64(0)
 		if searchResp != nil && !searchResp.IsError() {
 			results := gjson.GetBytes(searchResp.Body(), "payload").Array()
@@ -113,14 +113,16 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 		}
 
 		if contactID == 0 {
-			// Create contact
 			createResp, _ := cwClient.SetBody(map[string]interface{}{
 				"name":         contactName,
 				"phone_number": phoneNumber,
 			}).Post(fmt.Sprintf("%s/api/v1/accounts/%d/contacts", cwURL, accountID))
-			
+
 			if createResp != nil && !createResp.IsError() {
 				contactID = gjson.GetBytes(createResp.Body(), "payload.contact.id").Int()
+				if contactID == 0 {
+					contactID = gjson.GetBytes(createResp.Body(), "id").Int()
+				}
 			}
 		}
 
@@ -129,38 +131,40 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			continue
 		}
 
-		// 4. Create Conversation
-		convResp, _ := cwClient.SetBody(map[string]interface{}{
-			"source_id": phoneNumber,
-			"inbox_id":  inboxID,
-			"contact_id": contactID,
-			"status": "resolved", // Keep it resolved to not clutter the inbox
-		}).Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations", cwURL, accountID))
-
+		// 4. Find or Create Conversation
 		convID := int64(0)
-		if convResp != nil && !convResp.IsError() {
-			convID = gjson.GetBytes(convResp.Body(), "id").Int()
-		} else {
-			// Search for existing conversation
-			searchConvResp, _ := cwClient.Get(fmt.Sprintf("%s/api/v1/accounts/%d/contacts/%d/conversations", cwURL, accountID, contactID))
-			if searchConvResp != nil && !searchConvResp.IsError() {
-				convs := gjson.GetBytes(searchConvResp.Body(), "payload").Array()
-				for _, c := range convs {
-					if c.Get("inbox_id").Int() == int64(inboxID) {
-						convID = c.Get("id").Int()
-						break
-					}
+
+		// Try to find existing conversation first
+		searchConvResp, _ := cwClient.Get(fmt.Sprintf("%s/api/v1/accounts/%d/contacts/%d/conversations", cwURL, accountID, contactID))
+		if searchConvResp != nil && !searchConvResp.IsError() {
+			convs := gjson.GetBytes(searchConvResp.Body(), "payload").Array()
+			for _, c := range convs {
+				if c.Get("inbox_id").Int() == int64(inboxID) {
+					convID = c.Get("id").Int()
+					break
 				}
-			}
-			
-			if convID == 0 {
-				log.Printf("[Importer] Error: Could not find or create conversation for %s", phoneNumber)
-				continue
 			}
 		}
 
-		// 5. Send Messages in chronological order (reverse the slice if needed)
-		// Usually WAHA returns newest first? No, older WAHA might return oldest first. We should sort by timestamp.
+		// Create if not found
+		if convID == 0 {
+			convResp, _ := cwClient.SetBody(map[string]interface{}{
+				"inbox_id":   inboxID,
+				"contact_id": contactID,
+				"status":     "resolved",
+			}).Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations", cwURL, accountID))
+
+			if convResp != nil && !convResp.IsError() {
+				convID = gjson.GetBytes(convResp.Body(), "id").Int()
+			}
+		}
+
+		if convID == 0 {
+			log.Printf("[Importer] Could not find or create conversation for %s", phoneNumber)
+			continue
+		}
+
+		// 5. Send Messages in chronological order
 		for i := len(messagesToImport) - 1; i >= 0; i-- {
 			msg := messagesToImport[i]
 			text := msg.Get("body").String()
@@ -168,85 +172,102 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 			hasMedia := msg.Get("hasMedia").Bool()
 			timestamp := msg.Get("timestamp").Int()
 
-			msgType := 0 // incoming (from contact)
-			if fromMe {
-				msgType = 1 // outgoing (from agent)
-			}
-			
 			if text == "" && !hasMedia {
 				continue
 			}
 
-			// Prepend [Histórico: DD/MM/YYYY HH:MM] - 
-			historyPrefix := fmt.Sprintf("[Historico: %s] - ", time.Unix(timestamp, 0).Format("02/01/2006 15:04"))
+			// Build prefix with direction indicator
+			direction := "Cliente"
+			if fromMe {
+				direction = "Atendente"
+			}
+			historyPrefix := fmt.Sprintf("[Historico %s: %s] - ", direction, time.Unix(timestamp, 0).Format("02/01/2006 15:04"))
 			if text != "" {
 				text = historyPrefix + text
 			}
-			
+
+			// IMPORTANT: Always use message_type=0 (incoming) for imported history.
+			// Using message_type=1 (outgoing) causes Chatwoot to try to SEND the
+			// message via WhatsApp, resulting in "Failed to send" errors.
+			// We differentiate direction via the text prefix instead.
+			msgType := 0
+
 			if !hasMedia {
 				cwClient.SetBody(map[string]interface{}{
-					"content": text,
+					"content":      text,
 					"message_type": msgType,
-					"private": false,
-					"created_at": time.Unix(timestamp, 0).Format(time.RFC3339),
+					"private":      false,
 				}).Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations/%d/messages", cwURL, accountID, convID))
 			} else {
-				// Has media
+				// Has media - try to download from WAHA
 				msgIdStr := msg.Get("id").String()
-				
-				// Attempt to download media from WAHA
-				mediaResp, err := req.Get(wahaURL + "/api/" + sessionName + "/messages/" + url.PathEscape(msgIdStr) + "/download")
+				// URL-encode the message ID to handle special chars like "@"
+				encodedMsgId := url.PathEscape(msgIdStr)
+
+				mediaResp, err := req.Get(wahaURL + "/api/" + sessionName + "/messages/" + encodedMsgId + "/download")
 				if err != nil || mediaResp.IsError() {
-					// Fallback to text
+					log.Printf("[Importer] Could not download media for msg %s (status %d), falling back to text", msgIdStr, mediaResp.StatusCode())
+					// Fallback: save as text note
+					fallbackText := historyPrefix + "[Midia]"
+					if text != "" {
+						fallbackText = text
+					}
 					cwClient.SetBody(map[string]interface{}{
-						"content": "[Midia nao suportada na importacao: " + text + "]",
+						"content":      fallbackText,
 						"message_type": msgType,
-						"private": false,
-						"created_at": time.Unix(timestamp, 0).Format(time.RFC3339),
+						"private":      false,
 					}).Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations/%d/messages", cwURL, accountID, convID))
+					time.Sleep(500 * time.Millisecond)
 					continue
 				}
 
-				// Upload to Chatwoot via multipart
+				// Detect content type and extension
 				contentType := mediaResp.Header().Get("Content-Type")
 				if contentType == "" {
 					contentType = "application/octet-stream"
 				}
-				
-				// Quick extension guess
 				ext := ".bin"
-				if strings.Contains(contentType, "image/jpeg") { ext = ".jpg" }
-				if strings.Contains(contentType, "image/png") { ext = ".png" }
-				if strings.Contains(contentType, "audio/ogg") { ext = ".ogg" }
-				if strings.Contains(contentType, "video/mp4") { ext = ".mp4" }
-				if strings.Contains(contentType, "application/pdf") { ext = ".pdf" }
+				if strings.Contains(contentType, "image/jpeg") {
+					ext = ".jpg"
+				} else if strings.Contains(contentType, "image/png") {
+					ext = ".png"
+				} else if strings.Contains(contentType, "audio/ogg") {
+					ext = ".ogg"
+				} else if strings.Contains(contentType, "audio/mpeg") {
+					ext = ".mp3"
+				} else if strings.Contains(contentType, "video/mp4") {
+					ext = ".mp4"
+				} else if strings.Contains(contentType, "application/pdf") {
+					ext = ".pdf"
+				}
 
 				filename := "media_" + strconv.FormatInt(timestamp, 10) + ext
 
-				// Send multipart
 				if text == "" {
 					text = historyPrefix + "Midia"
 				}
-				
-				_, err = resty.New().R().
+
+				_, uploadErr := resty.New().R().
 					SetHeader("api_access_token", cwToken).
 					SetMultipartFormData(map[string]string{
-						"content": text,
+						"content":      text,
 						"message_type": strconv.Itoa(msgType),
-						"private": "false",
+						"private":      "false",
 					}).
 					SetMultipartField("attachments[]", filename, contentType, bytes.NewReader(mediaResp.Body())).
 					Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations/%d/messages", cwURL, accountID, convID))
-					
-				if err != nil {
-					log.Printf("[Importer] Failed to upload media for %s: %v", msgIdStr, err)
+
+				if uploadErr != nil {
+					log.Printf("[Importer] Failed to upload media for %s: %v", msgIdStr, uploadErr)
+				} else {
+					log.Printf("[Importer] Media uploaded OK: %s", filename)
 				}
 			}
-			
+
 			// Small delay to prevent rate limiting
-			time.Sleep(1500 * time.Millisecond) // 1.5s delay to prevent rate limit & spam
+			time.Sleep(500 * time.Millisecond)
 		}
-		
+
 		log.Printf("[Importer] Completed chat %s", phoneNumber)
 	}
 
