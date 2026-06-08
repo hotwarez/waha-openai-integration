@@ -1114,10 +1114,10 @@
             currentQrClientId = null;
         }
 
-                async function importFromQr(event) {
+        async function importFromQr(event) {
             if (!currentQrClientId) return;
 
-            const confirmImport = confirm("⚠️ ATENÇÃO: O robô de IA será PAUSADO automaticamente durante a importação para evitar conflitos no WhatsApp.\n\nApós a importação terminar, você precisará ativá-lo MANUALMENTE aqui no painel.\n\nDeseja continuar?");
+            const confirmImport = confirm("🚨 ATENÇÃO MÁXIMA PARA EVITAR BANIMENTOS E DUPLICAÇÃO 🚨\n\n1. Vá agora no Painel do WAHA (porta 3000) e DESLIGUE a integração do Chatwoot temporariamente.\n2. Se você não desligar, o WAHA vai achar que essas mensagens antigas são novas e enviará todas elas de volta para os seus clientes no WhatsApp!\n\nVocê JÁ DESLIGOU a integração do Chatwoot no WAHA?\n(Clique em OK apenas se já estiver desligada. Você poderá ligar novamente após o fim da importação).");
             if (!confirmImport) return;
 
             const days = parseInt(document.getElementById('qrImportDays').value) || 15;

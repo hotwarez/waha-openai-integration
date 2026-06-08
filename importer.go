@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/url"
 	"bytes"
 	"fmt"
 	"log"
@@ -40,45 +41,6 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 		req.SetHeader("Authorization", "Bearer "+wahaToken)
 	}
 
-	// --- PROTECTION: Disable Chatwoot Webhooks during import to prevent WhatsApp bans ---
-	var storedWebhooks []gjson.Result
-	whResp, err := resty.New().R().
-		SetHeader("api_access_token", cwToken).
-		Get(fmt.Sprintf("%s/api/v1/accounts/%d/webhooks", cwURL, accountID))
-	
-	if err == nil && !whResp.IsError() {
-		storedWebhooks = gjson.GetBytes(whResp.Body(), "payload").Array()
-		for _, wh := range storedWebhooks {
-			whID := wh.Get("id").Int()
-			log.Printf("[Importer] Temporarily deleting Chatwoot webhook %d to prevent ban", whID)
-			resty.New().R().
-				SetHeader("api_access_token", cwToken).
-				Delete(fmt.Sprintf("%s/api/v1/accounts/%d/webhooks/%d", cwURL, accountID, whID))
-		}
-	}
-
-	defer func() {
-		// Recreate webhooks
-		for _, wh := range storedWebhooks {
-			url := wh.Get("url").String()
-			var subs []string
-			for _, sub := range wh.Get("subscriptions").Array() {
-				subs = append(subs, sub.String())
-			}
-			log.Printf("[Importer] Recreating Chatwoot webhook: %s", url)
-			resty.New().R().
-				SetHeader("api_access_token", cwToken).
-				SetBody(map[string]interface{}{
-					"webhook": map[string]interface{}{
-						"url": url,
-						"subscriptions": subs,
-					},
-				}).
-				Post(fmt.Sprintf("%s/api/v1/accounts/%d/webhooks", cwURL, accountID))
-		}
-	}()
-	// ----------------------------------------------------------------------------------
-
 	// 1. Get Chats
 	resp, err := req.Get(wahaURL + "/api/" + sessionName + "/chats")
 	if err != nil || resp.IsError() {
@@ -110,7 +72,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 		log.Printf("[Importer] Processing chat %s", phoneNumber)
 
 		// 2. Get Messages for this chat
-		msgResp, err := req.Get(fmt.Sprintf("%s/api/%s/chats/%s/messages?limit=150", wahaURL, sessionName, chatId))
+		msgResp, err := req.Get(fmt.Sprintf("%s/api/%s/chats/%s/messages?limit=150&downloadMedia=true", wahaURL, sessionName, chatId))
 		if err != nil || msgResp.IsError() {
 			log.Printf("[Importer] Failed to fetch messages for %s", chatId)
 			continue
@@ -233,7 +195,7 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 				msgIdStr := msg.Get("id").String()
 				
 				// Attempt to download media from WAHA
-				mediaResp, err := req.Get(wahaURL + "/api/" + sessionName + "/messages/" + msgIdStr + "/download")
+				mediaResp, err := req.Get(wahaURL + "/api/" + sessionName + "/messages/" + url.PathEscape(msgIdStr) + "/download")
 				if err != nil || mediaResp.IsError() {
 					// Fallback to text
 					cwClient.SetBody(map[string]interface{}{

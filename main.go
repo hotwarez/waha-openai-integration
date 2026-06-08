@@ -23,7 +23,7 @@ import (
     "github.com/tidwall/gjson"
 )
 
-const AppVersion = "v1.1.1"
+const AppVersion = "v1.1.2"
 
 type Config struct {
     UseResponsesAPI bool
@@ -594,7 +594,44 @@ func main() {
 
     
 
-    r.POST("/webhook/:slug", func(c *gin.Context) {
+    
+	r.GET("/test-media/:chatId", func(c *gin.Context) {
+		chatId := c.Param("chatId")
+		client := Client{}
+		DB.First(&client, 1)
+		
+		wahaURL := "http://10.0.0.2:3000"
+		sessionName := client.SessionName
+		
+		req := resty.New().R()
+		msgResp, err := req.Get(wahaURL + "/api/" + sessionName + "/chats/" + chatId + "/messages?limit=10")
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		
+		messages := gjson.ParseBytes(msgResp.Body()).Array()
+		var mediaResult []map[string]interface{}
+		
+		for _, msg := range messages {
+			if msg.Get("hasMedia").Bool() {
+				msgId := msg.Get("id").String()
+				
+				// Try GET
+				getResp, _ := resty.New().R().Get(wahaURL + "/api/" + sessionName + "/messages/" + msgId + "/download")
+				
+				mediaResult = append(mediaResult, map[string]interface{}{
+					"id": msgId,
+					"get_status": getResp.StatusCode(),
+					"get_body_len": len(getResp.Body()),
+				})
+			}
+		}
+		
+		c.JSON(200, gin.H{"media": mediaResult})
+	})
+
+	r.POST("/webhook/:slug", func(c *gin.Context) {
         slug := c.Param("slug")
         var client Client
         if err := DB.Where("webhook_slug = ?", slug).First(&client).Error; err != nil {
