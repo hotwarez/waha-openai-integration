@@ -291,7 +291,13 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 					text = historyPrefix + "Midia"
 				}
 
-				_, uploadErr := resty.New().R().
+				// Strip codec suffix from content-type (e.g. "audio/ogg; codecs=opus" -> "audio/ogg")
+				// Some servers reject files with extra params in content-type
+				if idx := strings.Index(contentType, ";"); idx != -1 {
+					contentType = strings.TrimSpace(contentType[:idx])
+				}
+
+				uploadResp, uploadErr := resty.New().R().
 					SetHeader("api_access_token", cwToken).
 					SetMultipartFormData(map[string]string{
 						"content":      text,
@@ -302,9 +308,11 @@ func startChatwootImport(client Client, global GlobalSetting, days int) {
 					Post(fmt.Sprintf("%s/api/v1/accounts/%d/conversations/%d/messages", cwURL, accountID, convID))
 
 				if uploadErr != nil {
-					log.Printf("[Importer] Failed to upload media for %s: %v", msgIdStr, uploadErr)
+					log.Printf("[Importer] Upload network error for %s: %v", msgIdStr, uploadErr)
+				} else if uploadResp.IsError() {
+					log.Printf("[Importer] Chatwoot REJECTED upload (HTTP %d) for %s: %s", uploadResp.StatusCode(), filename, uploadResp.String())
 				} else {
-					log.Printf("[Importer] Media uploaded OK: %s", filename)
+					log.Printf("[Importer] Media OK (HTTP %d): %s contentType=%s size=%d bytes", uploadResp.StatusCode(), filename, contentType, len(mediaBytes))
 				}
 			}
 

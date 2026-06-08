@@ -23,7 +23,7 @@ import (
     "github.com/tidwall/gjson"
 )
 
-const AppVersion = "v1.1.6"
+const AppVersion = "v1.1.7"
 
 type Config struct {
     UseResponsesAPI bool
